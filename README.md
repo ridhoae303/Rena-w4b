@@ -41,7 +41,7 @@ protected configuration/string side.
 - Desktop-style WhatsApp Web inside WebView
 - Persistent WebView session handling
 - Manual **Refresh** without intentionally wiping the session
-- **Zoom/Out** toggle
+- **Zoom/Out** checkbox
 - Responsive scrollable navigation
 - Camera, microphone, notification and file access support
 - Fullscreen / immersive UI
