@@ -12,15 +12,7 @@
   <img src="https://img.shields.io/badge/Android-API%2026%2B-3DDC84?logo=android&logoColor=white" alt="Android" />
   <img src="https://img.shields.io/badge/Java-7%20compatible-orange?logo=java&logoColor=white" alt="Java" />
   <img src="https://img.shields.io/badge/C%2B%2B-Native-00599C?logo=c%2B%2B&logoColor=white" alt="C++" />
-  <img src="https://img.shields.io/badge/License-Custom-lightgrey" alt="License" />
-</p>
-
-<p align="center">
-  <a href="https://github.com/ridhoae303/Rena-w4b">GitHub</a>
-  ·
-  <a href="https://t.me/ridhoae303">Telegram</a>
-  ·
-  <a href="https://sociabuzz.com/ridhoae303">Donate</a>
+  <img src="https://img.shields.io/badge/License-RenaW4B-lightgrey" alt="License" />
 </p>
 
 ## Preview
