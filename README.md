@@ -385,10 +385,16 @@ Rena-w4b/
 
 ## Preview
 
-<p align="center">
-  <img width="360" height="800" alt="preview2" src="https://github.com/user-attachments/assets/5925d1e4-3602-4b25-ab34-6d4409e36b42" />
-  <img width="360" height="800" alt="preview" src="https://github.com/user-attachments/assets/255585dc-f103-4878-8027-b44008a293c4" />
-</p>
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img width="100%" alt="preview2" src="https://github.com/user-attachments/assets/5925d1e4-3602-4b25-ab34-6d4409e36b42" />
+    </td>
+    <td width="50%" align="center">
+      <img width="100%" alt="preview" src="https://github.com/user-attachments/assets/255585dc-f103-4878-8027-b44008a293c4" />
+    </td>
+  </tr>
+</table>
 
 ## Third-Party Stuff
 
