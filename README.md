@@ -103,8 +103,8 @@ client**. Third-party software, trademarks and services remain subject to
 their own licenses and terms.
 
 **Credits**
-Made with ❤️ by **ridhoae303**
-
+Made with ❤️ by **ridhoae303*
+Support with by **syputraa557*
 <p>
 <a href="https://github.com/ridhoae303"><img src="https://img.shields.io/badge/Github-ridhoae303-181717?logo=github&logoColor=white" alt="GitHub"></a>
 <a href="https://t.me/ridhoae303"><img src="https://img.shields.io/badge/Telegram-ridhoae303-26A5E4?logo=telegram&logoColor=white" alt="Telegram"></a>
