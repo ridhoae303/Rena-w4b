@@ -118,6 +118,6 @@ Made with ❤️ by **ridhoae303**
 **SuniDreami**
 
 <p>
-<a href="https://github.com/SunDream"><img src="https://img.shields.io/badge/Github-SuniDreami-181717?logo=github&logoColor=white" alt="GitHub"></a>
+<a href="https://github.com/SuniDream"><img src="https://img.shields.io/badge/Github-SuniDreami-181717?logo=github&logoColor=white" alt="GitHub"></a>
 <a href="https://wa.me/qr/6JZKBXL7GDUYM1"><img src="https://img.shields.io/badge/WhatsApp-SuniDreami-25D366?logo=whatsapp&logoColor=white" alt="WhatsApp"></a>
 </p>
