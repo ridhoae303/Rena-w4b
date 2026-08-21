@@ -119,5 +119,6 @@ Made with ❤️ by **ridhoae303**
 
 <p>
 <a href="https://github.com/sunidreami"><img src="https://img.shields.io/badge/Github-SuniDreami-181717?logo=github&logoColor=white" alt="GitHub"></a>
+<a href="https://t.me/SuniDreami"><img src="https://img.shields.io/badge/Telegram-SuniDreami-26A5E4?logo=telegram&logoColor=white" alt="Telegram"></a>
 <a href="https://wa.me/qr/6JZKBXL7GDUYM1"><img src="https://img.shields.io/badge/WhatsApp-SuniDreami-25D366?logo=whatsapp&logoColor=white" alt="WhatsApp"></a>
 </p>
