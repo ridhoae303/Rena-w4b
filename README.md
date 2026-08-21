@@ -102,7 +102,7 @@ Rena W4B is an independent wrapper project and is **not an official WhatsApp
 client**. Third-party software, trademarks and services remain subject to
 their own licenses and terms.
 
-##Credits##
+**Credits**
 Made with ❤️ by **ridhoae303**
 
 <p>
