@@ -102,13 +102,22 @@ Rena W4B is an independent wrapper project and is **not an official WhatsApp
 client**. Third-party software, trademarks and services remain subject to
 their own licenses and terms.
 
-## Credits
-
+##Credits##
 Made with ❤️ by **ridhoae303**
 
 <p>
-  <a href="https://github.com/ridhoae303"><img src="https://img.shields.io/badge/GitHub-ridhoae303-181717?logo=github&logoColor=white" alt="GitHub" /></a>
-  <a href="https://t.me/ridhoae303"><img src="https://img.shields.io/badge/Telegram-ridhoae303-26A5E4?logo=telegram&logoColor=white" alt="Telegram" /></a>
-  <a href="https://chat.whatsapp.com/DcA3oplpxcbDr5vVqIfvE6"><img src="https://img.shields.io/badge/WhatsApp-Modding%20Community-25D366?logo=whatsapp&logoColor=white" alt="Modding Community" /></a>
-  <a href="https://sociabuzz.com/ridhoae303"><img src="https://img.shields.io/badge/Donate-SociaBuzz-FF4D8D?logo=buymeacoffee&logoColor=white" alt="Donate" /></a>
+<a href="https://github.com/ridhoae303"><img src="https://img.shields.io/badge/Github-ridhoae303-181717?logo=github&logoColor=white" alt="GitHub"></a>
+<a href="https://t.me/ridhoae303"><img src="https://img.shields.io/badge/Telegram-ridhoae303-26A5E4?logo=telegram&logoColor=white" alt="Telegram"></a>
+<a href="https://chat.whatsapp.com/DCA3op1pxcDbr5VvqIFvE6"><img src="https://img.shields.io/badge/WhatsApp-0b0b0b?logo=WhatsApp&logoColor=white" alt="WhatsApp"></a>
+<a href="https://sociabuzz.com/ridhoae303"><img src="https://img.shields.io/badge/Donate-SociaBuzz-FF4D8D?logo=buymeacoffee&logoColor=white" alt="Donate"></a>
+</p>
+
+---
+
+**Collaborator**  
+**SuniDreami**
+
+<p>
+<a href="https://github.com/SunDream"><img src="https://img.shields.io/badge/Github-SuniDreami-181717?logo=github&logoColor=white" alt="GitHub"></a>
+<a href="https://wa.me/qr/6JZKBXL7GDUYM1"><img src="https://img.shields.io/badge/WhatsApp-SuniDreami-25D366?logo=whatsapp&logoColor=white" alt="WhatsApp"></a>
 </p>
