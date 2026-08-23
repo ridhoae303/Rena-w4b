@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">@font/font</item>
+        <item name="android:colorAccent">#00A884</item>
+        <item name="android:alertDialogTheme">@style/RenaDialogTheme</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:statusBarColor">#111B21</item>
+        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowContentTransitions">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+
+    <style name="RenaDialogTheme" parent="@android:style/Theme.Material.Dialog.Alert">
+        <item name="android:fontFamily">@font/font</item>
+        <item name="android:windowBackground">@drawable/dialog_background</item>
+        <item name="android:colorAccent">#00A884</item>
+        <item name="android:buttonBarButtonStyle">@style/RenaDialogButton</item>
+    </style>
+
+    <style name="RenaDialogButton" parent="@android:style/Widget.Material.Button.Borderless">
+        <item name="android:textColor">#00A884</item>
+        <item name="android:fontFamily">@font/font</item>
+    </style>
+
+    <style name="SplashTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">@font/font</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:statusBarColor">#FFFFFF</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowBackground">#FFFFFF</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>
