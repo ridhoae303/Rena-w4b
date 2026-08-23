@@ -14,3 +14,7 @@
 
 - Github: [hajacmyk](https://github.com/hajacmyk)
 - Role: Testing
+
+### SuniDreami
+- GitHub: [sunidreami](https://github.com/sunidreami)
+- Role: Collaborator
