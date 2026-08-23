@@ -7,6 +7,6 @@
 
 ### syputraa572 
 
--Guthub: [syputraa572]
+-Github: [syputraa572]
 (https://github.com/syputraa572)
 role: testing
