@@ -53,49 +53,6 @@ The project also has a native C++ layer for protected config strings and app int
   </tr>
 </table>
 
-
-## Download
-
-Want to grab the latest APK? Head over to the [GitHub Releases](https://github.com/ridhoae303/Rena-w4b/releases).
-
-That's where the official builds are posted. Open the release you want, check the assets, and grab the APK from there.
-
-### Preview
-
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <img src="https://github.com/user-attachments/assets/11d7ccdf-f45e-434a-9d67-88d4040d5834" alt="preview" width="100%" />
-    </td>
-    <td align="center" width="50%">
-      <img src="https://github.com/user-attachments/assets/8ca8a997-df53-4743-b7d0-4429d13afae1" alt="preview1" width="100%" />
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%">
-      <img src="https://github.com/user-attachments/assets/59b21cbf-39ed-41ca-aa2d-f2bd02830797" alt="preview2" width="100%" />
-    </td>
-    <td align="center" width="50%">
-      <img src="https://github.com/user-attachments/assets/eeb57548-9490-433a-bf1c-a1f4e5800d21" alt="preview3" width="100%" />
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%">
-      <img src="https://github.com/user-attachments/assets/1834238e-3212-44cf-921e-d0cdda93b335" alt="preview4" width="100%" />
-    </td>
-    <td align="center" width="50%">
-      <img src="https://github.com/user-attachments/assets/15601b41-4fa7-4802-b692-bf4e0302ae6f" alt="preview5" width="100%" />
-    </td>
-  </tr>
-</table>
-
-
-## Download
-
-Want to grab the latest APK? Head over to the [GitHub Releases](https://github.com/ridhoae303/Rena-w4b/releases).
-
-That's where the official builds are posted. Open the release you want, check the assets, and grab the APK from there.
-
 ## Features
 
 - WhatsApp Web inside a dedicated Android WebView
