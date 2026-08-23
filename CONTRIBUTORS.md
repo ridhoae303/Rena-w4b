@@ -7,12 +7,10 @@
 
 ### syputraa572 
 
-- Github: [syputraa572]
-.(https://github.com/syputraa572).
+- Github: [syputraa572](https://github.com/syputraa572)
 - Role: Testing
 
 ### hajacmyk
 
-- Github: .[hajacmyk].
-.(https://github.com/hajacmyk).
+- Github: [hajacmyk](https://github.com/hajacmyk)
 - Role: Testing
