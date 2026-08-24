@@ -2,7 +2,12 @@
 #include <string>
 #include <fstream>
 #include <cstring>
+#include <cstdint>
+#include <dlfcn.h>
+#include <sys/stat.h>
 #include <EasyObfuse.h>
+
+#define JNI_METHOD(name) Java_com_rena_w4b_NativeConfig_##name
 
 static bool clearJniException(JNIEnv* env) {
     if (env && env->ExceptionCheck()) {
@@ -20,6 +25,66 @@ static jstring js(JNIEnv* env, const char* value) {
         return nullptr;
     }
     return out;
+}
+
+
+extern "C" JNIEXPORT jstring JNICALL
+JNI_METHOD(unsupportedAndroidTitle)(JNIEnv* env, jclass) {
+    return js(env, OBFUSCATE("Unsupported Android Version"));
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+JNI_METHOD(unsupportedAndroidMessage)(JNIEnv* env, jclass) {
+    return js(env, OBFUSCATE("Rena W4B requires Android 8.0 (API 26) or later."));
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+JNI_METHOD(biometricEnableTitle)(JNIEnv* env, jclass) {
+    return js(env, OBFUSCATE("Enable Fingerprint Unlock"));
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+JNI_METHOD(biometricEnableSubtitle)(JNIEnv* env, jclass) {
+    return js(env, OBFUSCATE("Authenticate to enable fingerprint unlock"));
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+JNI_METHOD(unlockDialogTitle)(JNIEnv* env, jclass) {
+    return js(env, OBFUSCATE("Unlock Rena W4B"));
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+JNI_METHOD(unlockDialogSubtitle)(JNIEnv* env, jclass) {
+    return js(env, OBFUSCATE("Use fingerprint to unlock"));
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+JNI_METHOD(fingerprintTouchUnlockText)(JNIEnv* env, jclass) {
+    return js(env, OBFUSCATE("Touch the fingerprint sensor to unlock."));
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+JNI_METHOD(dataCookiesDescription)(JNIEnv* env, jclass) {
+    return js(env, OBFUSCATE(
+        "Clears cookies and Web Storage for the current WebView profile. "
+        "You will be signed out of the current web session."
+    ));
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+JNI_METHOD(dataCacheDescription)(JNIEnv* env, jclass) {
+    return js(env, OBFUSCATE(
+        "Clears WebView and application cache files. Cookies and the current "
+        "login session are kept."
+    ));
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+JNI_METHOD(dataAllWebDescription)(JNIEnv* env, jclass) {
+    return js(env, OBFUSCATE(
+        "Clears cookies, Web Storage, WebView cache, and related web data "
+        "for the current profile. Downloaded files in Rena are kept."
+    ));
 }
 
 static std::string permissionName(JNIEnv* env, jstring permission) {
@@ -128,6 +193,105 @@ static bool verifyIntegrityNative(JNIEnv* env, jobject context) {
         if (!nativeCheckString(env, className, OBFUSCATE("com.rena.w4b.RenaApplication"))
                 || clearJniException(env)) {
             return false;
+        }
+
+        jfieldID appPackageField = env->GetFieldID(
+            appInfoCls, "packageName", "Ljava/lang/String;");
+        jfieldID uidField = env->GetFieldID(appInfoCls, "uid", "I");
+        jfieldID sourceDirField = env->GetFieldID(
+            appInfoCls, "sourceDir", "Ljava/lang/String;");
+        jfieldID nativeLibraryDirField = env->GetFieldID(
+            appInfoCls, "nativeLibraryDir", "Ljava/lang/String;");
+        if (!appPackageField || !uidField || !sourceDirField ||
+            !nativeLibraryDirField || clearJniException(env)) {
+            return false;
+        }
+
+        jstring appPackageName = static_cast<jstring>(
+            env->GetObjectField(appInfo, appPackageField));
+        if (!appPackageName || !nativeCheckString(
+                env, appPackageName, OBFUSCATE("com.rena.w4b")) ||
+            clearJniException(env)) {
+            return false;
+        }
+
+        jint appUid = env->GetIntField(appInfo, uidField);
+        jclass processCls = env->FindClass("android/os/Process");
+        if (!processCls || clearJniException(env)) return false;
+        jmethodID myUid = env->GetStaticMethodID(processCls, "myUid", "()I");
+        if (!myUid || clearJniException(env)) return false;
+        jint runtimeUid = env->CallStaticIntMethod(processCls, myUid);
+        if (clearJniException(env) || runtimeUid != appUid) return false;
+
+        jmethodID getPackagesForUid = env->GetMethodID(
+            pmCls, "getPackagesForUid", "(I)[Ljava/lang/String;");
+        if (!getPackagesForUid || clearJniException(env)) return false;
+        jobjectArray packages = static_cast<jobjectArray>(
+            env->CallObjectMethod(pm, getPackagesForUid, runtimeUid));
+        if (!packages || clearJniException(env)) return false;
+        bool uidPackageMatch = false;
+        const jsize packageCount = env->GetArrayLength(packages);
+        for (jsize i = 0; i < packageCount; ++i) {
+            jstring item = static_cast<jstring>(
+                env->GetObjectArrayElement(packages, i));
+            if (!item || clearJniException(env)) return false;
+            if (nativeCheckString(env, item, OBFUSCATE("com.rena.w4b"))) {
+                uidPackageMatch = true;
+            }
+            env->DeleteLocalRef(item);
+            if (uidPackageMatch) break;
+        }
+        if (!uidPackageMatch || clearJniException(env)) return false;
+
+        jstring sourceDir = static_cast<jstring>(
+            env->GetObjectField(appInfo, sourceDirField));
+        jstring nativeLibraryDir = static_cast<jstring>(
+            env->GetObjectField(appInfo, nativeLibraryDirField));
+        if (!sourceDir || !nativeLibraryDir || clearJniException(env)) return false;
+
+        const char* sourcePath = env->GetStringUTFChars(sourceDir, nullptr);
+        const char* nativeLibDir = env->GetStringUTFChars(nativeLibraryDir, nullptr);
+        if (!sourcePath || !nativeLibDir || clearJniException(env)) return false;
+
+        struct stat sourceStat{};
+        const bool sourceIsRegularFile =
+            (stat(sourcePath, &sourceStat) == 0) && S_ISREG(sourceStat.st_mode);
+        const std::string nativeDirValue(nativeLibDir);
+        env->ReleaseStringUTFChars(sourceDir, sourcePath);
+        env->ReleaseStringUTFChars(nativeLibraryDir, nativeLibDir);
+        if (!sourceIsRegularFile || clearJniException(env)) return false;
+
+        Dl_info libInfo{};
+        if (dladdr(
+                reinterpret_cast<void*>(
+                    reinterpret_cast<uintptr_t>(&verifyIntegrityNative)),
+                &libInfo) != 0 &&
+            libInfo.dli_fname != nullptr &&
+            !nativeDirValue.empty()) {
+            const std::string loadedPath(libInfo.dli_fname);
+            if (loadedPath.compare(0, nativeDirValue.size(), nativeDirValue) != 0) {
+                return false;
+            }
+        }
+
+        std::ifstream cmdline(static_cast<char*>(OBFUSCATE("/proc/self/cmdline")),
+                              std::ios::in | std::ios::binary);
+        if (cmdline.is_open()) {
+            char processName[256] = {};
+            cmdline.read(processName, sizeof(processName) - 1);
+            const std::streamsize readCount = cmdline.gcount();
+            if (readCount > 0) {
+                const std::string runtimeProcess(processName,
+                    static_cast<size_t>(readCount > 0 ? readCount : 0));
+                const size_t nul = runtimeProcess.find('\0');
+                const std::string processId =
+                    runtimeProcess.substr(0, nul == std::string::npos ?
+                                             runtimeProcess.size() : nul);
+                if (!processId.empty() &&
+                    processId != static_cast<char*>(OBFUSCATE("com.rena.w4b"))) {
+                    return false;
+                }
+            }
         }
 
         jclass applicationBaseCls = env->FindClass("android/app/Application");
@@ -317,8 +481,6 @@ static bool verifyIntegrityNative(JNIEnv* env, jobject context) {
         return false;
     }
 }
-
-#define JNI_METHOD(name) Java_com_rena_w4b_NativeConfig_##name
 
 extern "C" JNIEXPORT jstring JNICALL
 JNI_METHOD(webUrl)(JNIEnv* env, jclass) {
@@ -1007,11 +1169,134 @@ JNI_METHOD(verifyApkSigner)(JNIEnv* env, jclass, jobject context, jstring apkPat
     }
 }
 
+static bool verifyRuntimeBindingNative(JNIEnv* env, jobject context) {
+    if (!env || !context) return false;
+
+    try {
+        clearJniException(env);
+        jclass contextCls = env->GetObjectClass(context);
+        if (!contextCls || clearJniException(env)) return false;
+
+        jmethodID getPackageName = env->GetMethodID(
+            contextCls, "getPackageName", "()Ljava/lang/String;");
+        jmethodID getPackageManager = env->GetMethodID(
+            contextCls, "getPackageManager",
+            "()Landroid/content/pm/PackageManager;");
+        if (!getPackageName || !getPackageManager || clearJniException(env)) return false;
+
+        jstring packageName = static_cast<jstring>(
+            env->CallObjectMethod(context, getPackageName));
+        if (!packageName || clearJniException(env)) return false;
+        if (!nativeCheckString(env, packageName, OBFUSCATE("com.rena.w4b"))) return false;
+
+        jobject pm = env->CallObjectMethod(context, getPackageManager);
+        if (!pm || clearJniException(env)) return false;
+        jclass pmCls = env->GetObjectClass(pm);
+        if (!pmCls || clearJniException(env)) return false;
+
+        jmethodID getApplicationInfo = env->GetMethodID(
+            pmCls, "getApplicationInfo",
+            "(Ljava/lang/String;I)Landroid/content/pm/ApplicationInfo;");
+        jmethodID getPackagesForUid = env->GetMethodID(
+            pmCls, "getPackagesForUid", "(I)[Ljava/lang/String;");
+        if (!getApplicationInfo || !getPackagesForUid || clearJniException(env)) return false;
+
+        jobject info = env->CallObjectMethod(pm, getApplicationInfo, packageName, 0);
+        if (!info || clearJniException(env)) return false;
+        jclass infoCls = env->GetObjectClass(info);
+        if (!infoCls || clearJniException(env)) return false;
+
+        jfieldID classNameField = env->GetFieldID(
+            infoCls, "className", "Ljava/lang/String;");
+        jfieldID uidField = env->GetFieldID(infoCls, "uid", "I");
+        jfieldID nativeLibraryDirField = env->GetFieldID(
+            infoCls, "nativeLibraryDir", "Ljava/lang/String;");
+        if (!classNameField || !uidField || !nativeLibraryDirField || clearJniException(env)) return false;
+
+        jstring className = static_cast<jstring>(env->GetObjectField(info, classNameField));
+        if (!className || !nativeCheckString(
+                env, className, OBFUSCATE("com.rena.w4b.RenaApplication"))) return false;
+
+        jint appUid = env->GetIntField(info, uidField);
+        jclass processCls = env->FindClass("android/os/Process");
+        if (!processCls || clearJniException(env)) return false;
+        jmethodID myUid = env->GetStaticMethodID(processCls, "myUid", "()I");
+        if (!myUid || clearJniException(env)) return false;
+        jint runtimeUid = env->CallStaticIntMethod(processCls, myUid);
+        if (clearJniException(env) || runtimeUid != appUid) return false;
+
+        jobjectArray packages = static_cast<jobjectArray>(
+            env->CallObjectMethod(pm, getPackagesForUid, runtimeUid));
+        if (!packages || clearJniException(env)) return false;
+        bool packageBound = false;
+        const jsize count = env->GetArrayLength(packages);
+        for (jsize i = 0; i < count; ++i) {
+            jstring item = static_cast<jstring>(
+                env->GetObjectArrayElement(packages, i));
+            if (!item || clearJniException(env)) return false;
+            packageBound = nativeCheckString(
+                env, item, OBFUSCATE("com.rena.w4b"));
+            env->DeleteLocalRef(item);
+            if (packageBound) break;
+        }
+        if (!packageBound || clearJniException(env)) return false;
+
+        jstring nativeLibraryDir = static_cast<jstring>(
+            env->GetObjectField(info, nativeLibraryDirField));
+        if (!nativeLibraryDir || clearJniException(env)) return false;
+        const char* nativeLibDir = env->GetStringUTFChars(nativeLibraryDir, nullptr);
+        if (!nativeLibDir || clearJniException(env)) return false;
+        const std::string expectedDir(nativeLibDir);
+        env->ReleaseStringUTFChars(nativeLibraryDir, nativeLibDir);
+        if (expectedDir.empty() || clearJniException(env)) return false;
+
+        Dl_info libInfo{};
+        if (dladdr(
+                reinterpret_cast<void*>(
+                    reinterpret_cast<uintptr_t>(&verifyRuntimeBindingNative)),
+                &libInfo) == 0 ||
+            libInfo.dli_fname == nullptr) {
+            return false;
+        }
+
+        const std::string loadedPath(libInfo.dli_fname);
+        if (loadedPath.compare(0, expectedDir.size(), expectedDir) != 0) {
+            return false;
+        }
+
+        std::ifstream cmdline(
+            static_cast<char*>(OBFUSCATE("/proc/self/cmdline")),
+            std::ios::in | std::ios::binary);
+        if (!cmdline.is_open()) return false;
+        char processName[256] = {};
+        cmdline.read(processName, sizeof(processName) - 1);
+        if (cmdline.gcount() <= 0) return false;
+        const std::string processId(processName);
+        if (processId != static_cast<char*>(OBFUSCATE("com.rena.w4b"))) return false;
+
+        return true;
+    } catch (...) {
+        clearJniException(env);
+        return false;
+    }
+}
+
 extern "C" JNIEXPORT jboolean JNICALL
 JNI_METHOD(verifyIntegrity)(JNIEnv* env, jclass, jobject context) {
     if (!env || !context) return JNI_FALSE;
     try {
         return verifyIntegrityNative(env, context) ? JNI_TRUE : JNI_FALSE;
+    } catch (...) {
+        clearJniException(env);
+        return JNI_FALSE;
+    }
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+JNI_METHOD(verifyRuntimeBinding)(JNIEnv* env, jclass, jobject context) {
+    if (!env || !context) return JNI_FALSE;
+    try {
+        return verifyRuntimeBindingNative(env, context) ? JNI_TRUE : JNI_FALSE;
     } catch (...) {
         clearJniException(env);
         return JNI_FALSE;
