@@ -111,8 +111,15 @@ public class UpdateFileProvider extends ContentProvider {
             return new File("/dev/null");
         }
 
+        File root = context.getExternalFilesDir(
+                android.os.Environment.DIRECTORY_DOWNLOADS
+        );
+        if (root == null) {
+            return new File("/dev/null");
+        }
+
         return new File(
-                android.os.Environment.getExternalStorageDirectory(),
+                root,
                 "Rena/Updates/Rena-W4B-update.apk"
         );
     }

@@ -124,6 +124,7 @@ public class MainActivity extends Activity {
     private boolean hideThreeDot = false;
     private boolean hideWarningShown = false;
     private boolean hideNotifications = false;
+    private boolean hideBarNotification = false;
     private boolean reduceAnimations = false;
     private boolean historyFloorApplied = false;
     private boolean exitingApp = false;
@@ -167,6 +168,8 @@ public class MainActivity extends Activity {
     private final AtomicBoolean updaterRunning = new AtomicBoolean(false);
     private boolean pendingUpdatePermissionCheck = false;
     private boolean updateCheckRunning = false;
+    private boolean updateInstallInProgress = false;
+    private long lastAutomaticUpdateCheckAt = 0L;
     private String pendingUpdateApkUrl;
     private String pendingUpdateDigest;
     private int pendingStartupPermissionAfterSettings = -1;
@@ -338,6 +341,9 @@ public class MainActivity extends Activity {
         );
         hideNotifications = RenaSettingsStore.getBoolean(
                 this, "hide_notifications", false
+        );
+        hideBarNotification = RenaSettingsStore.getBoolean(
+                this, "hide_bar_notification", false
         );
         reduceAnimations = RenaSettingsStore.getBoolean(
                 this, "reduce_animation", false
@@ -1752,6 +1758,26 @@ public class MainActivity extends Activity {
                 enabled
                         ? NativeConfig.hideNotificationEnabledText()
                         : NativeConfig.hideNotificationDisabledText(),
+                enabled
+        );
+    }
+
+    private void setHideBarNotification(boolean enabled) {
+        hideBarNotification = enabled;
+
+        RenaSettingsStore.putBoolean(
+                this,
+                "hide_bar_notification",
+                enabled
+        );
+
+        applyImmersiveFullscreen();
+
+        showToggleToastOnce(
+                "hide_bar_notification",
+                enabled
+                        ? NativeConfig.hideBarNotificationEnabledText()
+                        : NativeConfig.hideBarNotificationDisabledText(),
                 enabled
         );
     }
@@ -3607,6 +3633,21 @@ public class MainActivity extends Activity {
                         }
                 );
 
+        LinearLayout hideBarNotificationRow =
+                buildToggleRow(
+                        NativeConfig.hideBarNotificationLabel(),
+                        hideBarNotification,
+                        new android.widget.CompoundButton.OnCheckedChangeListener() {
+                            @Override
+                            public void onCheckedChanged(
+                                    android.widget.CompoundButton button,
+                                    boolean checked
+                            ) {
+                                setHideBarNotification(checked);
+                            }
+                        }
+                );
+
         LinearLayout reduceAnimationRow =
                 buildToggleRow(
                         NativeConfig.reduceAnimationLabel(),
@@ -3632,6 +3673,10 @@ public class MainActivity extends Activity {
         );
         switchDrawerBody.addView(
                 hideNotificationRow,
+                compactToggleLp()
+        );
+        switchDrawerBody.addView(
+                hideBarNotificationRow,
                 compactToggleLp()
         );
         switchDrawerBody.addView(
@@ -4561,68 +4606,19 @@ public class MainActivity extends Activity {
     }
 
     private void checkForUpdates() {
+        startUpdateCheck(false);
+    }
+
+    private void startAutomaticUpdateCheck() {
+        startUpdateCheck(true);
+    }
+
+    private void startUpdateCheck(final boolean automatic) {
         if (updateCheckRunning) {
             return;
         }
 
-        if (Build.VERSION.SDK_INT >= 26 &&
-                !getPackageManager()
-                        .canRequestPackageInstalls()) {
-
-            new AlertDialog.Builder(this)
-                    .setTitle(
-                            NativeConfig.updateInstallPermissionTitle()
-                    )
-                    .setMessage(
-                            NativeConfig.updateInstallPermissionMessage()
-                    )
-                    .setNegativeButton(
-                            NativeConfig.cancelText(),
-                            new android.content.DialogInterface.OnClickListener() {
-                                @Override
-                                public void onClick(
-                                        android.content.DialogInterface dialog,
-                                        int which
-                                ) {
-                                    pendingUpdatePermissionCheck = false;
-                                    finishUpdateCheckAnimation();
-                                }
-                            }
-                    )
-                    .setPositiveButton(
-                            NativeConfig.storageSettingsButton(),
-                            new android.content.DialogInterface.OnClickListener() {
-                                @Override
-                                public void onClick(
-                                        android.content.DialogInterface dialog,
-                                        int which
-                                ) {
-                                    pendingUpdatePermissionCheck = true;
-
-                                    try {
-                                        startActivity(
-                                                new Intent(
-                                                        android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                                                        Uri.parse(
-                                                                "package:" +
-                                                                getPackageName()
-                                                        )
-                                                )
-                                        );
-                                    } catch (Throwable ignored) {
-                                    }
-                                }
-                            }
-                    )
-                    .show();
-
-            return;
-        }
-
-        if (!updaterRunning.compareAndSet(
-                false,
-                true
-        )) {
+        if (!updaterRunning.compareAndSet(false, true)) {
             return;
         }
 
@@ -4632,13 +4628,13 @@ public class MainActivity extends Activity {
                 new Runnable() {
                     @Override
                     public void run() {
-                        performUpdateCheck();
+                        performUpdateCheck(automatic);
                     }
                 }
         );
     }
 
-    private void performUpdateCheck() {
+    private void performUpdateCheck(final boolean automatic) {
         HttpURLConnection connection = null;
 
         try {
@@ -4667,9 +4663,13 @@ public class MainActivity extends Activity {
                     "User-Agent",
                     NativeConfig.developerName()
             );
+            connection.setRequestProperty(
+                    "X-GitHub-Api-Version",
+                    "2026-03-10"
+            );
 
-            if (connection.getResponseCode() < 200 ||
-                    connection.getResponseCode() >= 300) {
+            int responseCode = connection.getResponseCode();
+            if (responseCode < 200 || responseCode >= 300) {
                 throw new java.io.IOException(
                         NativeConfig.githubRequestFailedText()
                 );
@@ -4767,14 +4767,15 @@ public class MainActivity extends Activity {
                             }
 
                             if (comparison <= 0) {
-                                Toast.makeText(
-                                        MainActivity.this,
-                                        comparison < 0
-                                                ? NativeConfig.updateNotAvailableText()
-                                                : NativeConfig.upToDateText(),
-                                        Toast.LENGTH_SHORT
-                                ).show();
-
+                                if (!automatic) {
+                                    Toast.makeText(
+                                            MainActivity.this,
+                                            comparison < 0
+                                                    ? NativeConfig.updateNotAvailableText()
+                                                    : NativeConfig.upToDateText(),
+                                            Toast.LENGTH_SHORT
+                                    ).show();
+                                }
                                 return;
                             }
 
@@ -4785,16 +4786,18 @@ public class MainActivity extends Activity {
                                             digest
                                     )) {
 
-                                openExternal(
-                                        NativeConfig.githubRepositoryUrl() +
-                                        "/releases/latest"
-                                );
+                                if (!automatic) {
+                                    openExternal(
+                                            NativeConfig.githubRepositoryUrl() +
+                                            "/releases/latest"
+                                    );
 
-                                Toast.makeText(
-                                        MainActivity.this,
-                                        NativeConfig.updateDigestMissingText(),
-                                        Toast.LENGTH_LONG
-                                ).show();
+                                    Toast.makeText(
+                                            MainActivity.this,
+                                            NativeConfig.updateDigestMissingText(),
+                                            Toast.LENGTH_LONG
+                                    ).show();
+                                }
 
                                 return;
                             }
@@ -4820,11 +4823,13 @@ public class MainActivity extends Activity {
                             updaterRunning.set(false);
                             updateCheckRunning = false;
 
-                            Toast.makeText(
-                                    MainActivity.this,
-                                    NativeConfig.updateDownloadFailedText(),
-                                    Toast.LENGTH_LONG
-                            ).show();
+                            if (!automatic) {
+                                Toast.makeText(
+                                        MainActivity.this,
+                                        NativeConfig.updateDownloadFailedText(),
+                                        Toast.LENGTH_LONG
+                                ).show();
+                            }
                         }
                     }
             );
@@ -5127,11 +5132,49 @@ public class MainActivity extends Activity {
             final String apkUrl,
             final String expectedDigest
     ) {
-        if (Build.VERSION.SDK_INT >= 30 &&
-                !hasAllFilesAccess()) {
+        if (Build.VERSION.SDK_INT >= 26 &&
+                !getPackageManager().canRequestPackageInstalls()) {
             pendingUpdateApkUrl = apkUrl;
             pendingUpdateDigest = expectedDigest;
-            requestAllFilesAccessForDownload();
+            pendingUpdatePermissionCheck = true;
+
+            new AlertDialog.Builder(this)
+                    .setTitle(NativeConfig.updateInstallPermissionTitle())
+                    .setMessage(NativeConfig.updateInstallPermissionMessage())
+                    .setNegativeButton(NativeConfig.cancelText(), null)
+                    .setPositiveButton(
+                            NativeConfig.storageSettingsButton(),
+                            new android.content.DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(
+                                        android.content.DialogInterface dialog,
+                                        int which
+                                ) {
+                                    try {
+                                        startActivity(
+                                                new Intent(
+                                                        android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                                        Uri.parse(
+                                                                "package:" + getPackageName()
+                                                        )
+                                                )
+                                        );
+                                    } catch (Throwable ignored) {
+                                    }
+                                }
+                            }
+                    )
+                    .show();
+            return;
+        }
+
+        final File updateRoot = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+        if (updateRoot == null) {
+            Toast.makeText(
+                    this,
+                    NativeConfig.updateDownloadFailedText(),
+                    Toast.LENGTH_LONG
+            ).show();
             return;
         }
 
@@ -5139,175 +5182,115 @@ public class MainActivity extends Activity {
                 new Runnable() {
                     @Override
                     public void run() {
-                        File output = null;
-                        HttpURLConnection connection = null;
-
-                        try {
-                            File updates =
-                                    new File(
-                                            new File(
-                                                    Environment.getExternalStorageDirectory(),
-                                                    "Rena"
-                                            ),
-                                            "Updates"
-                                    );
-
-                            if (!updates.exists() &&
-                                    !updates.mkdirs()) {
-                                throw new java.io.IOException(
-                                        "Unable to create update directory"
-                                );
-                            }
-
-                            output =
-                                    new File(
-                                            updates,
-                                            "Rena-W4B-update.apk"
-                                    );
-
-                            URL url =
-                                    new URL(
-                                            apkUrl
-                                    );
-
-                            connection =
-                                    (HttpURLConnection)
-                                            url.openConnection();
-
-                            connection.setConnectTimeout(
-                                    10000
-                            );
-
-                            connection.setReadTimeout(
-                                    30000
-                            );
-
-                            connection.setRequestProperty(
-                                    "User-Agent",
-                                    NativeConfig.developerName()
-                            );
-
-                            if (connection.getResponseCode() < 200 ||
-                                    connection.getResponseCode() >= 300) {
-                                throw new java.io.IOException(
-                                        "APK download failed"
-                                );
-                            }
-
-                            InputStream input =
-                                    new BufferedInputStream(
-                                            connection.getInputStream()
-                                    );
-
-                            FileOutputStream outputStream =
-                                    new FileOutputStream(
-                                            output
-                                    );
-
-                            MessageDigest digest =
-                                    MessageDigest.getInstance(
-                                            "SHA-256"
-                                    );
-
-                            byte[] buffer =
-                                    new byte[8192];
-
-                            int read;
-
-                            while (
-                                    (read =
-                                            input.read(
-                                                    buffer
-                                            )) != -1
-                            ) {
-                                digest.update(
-                                        buffer,
-                                        0,
-                                        read
-                                );
-
-                                outputStream.write(
-                                        buffer,
-                                        0,
-                                        read
-                                );
-                            }
-
-                            outputStream.flush();
-                            outputStream.close();
-                            input.close();
-
-                            String actual =
-                                    toHex(
-                                            digest.digest()
-                                    );
-
-                            if (!expectedDigest
-                                    .equalsIgnoreCase(
-                                            actual
-                                    )) {
-                                throw new SecurityException(
-                                        "APK digest mismatch"
-                                );
-                            }
-
-                            if (!verifyApkSigner(
-                                    output
-                            )) {
-                                throw new SecurityException(
-                                        "APK signer mismatch"
-                                );
-                            }
-
-                            final File installerFile =
-                                    output;
-
-                            runOnUiThread(
-                                    new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            if (!isUiAlive()) {
-                                                return;
-                                            }
-                                            launchApkInstaller(
-                                                    installerFile
-                                            );
-                                        }
-                                    }
-                            );
-
-                        } catch (Throwable ignored) {
-                            if (output != null) {
-                                try {
-                                    output.delete();
-                                } catch (Throwable ignoredDelete) {
-                                }
-                            }
-
-                            runOnUiThread(
-                                    new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            if (!isUiAlive()) {
-                                                return;
-                                            }
-                                            Toast.makeText(
-                                                    MainActivity.this,
-                                                    NativeConfig.updateDownloadFailedText(),
-                                                    Toast.LENGTH_LONG
-                                            ).show();
-                                        }
-                                    }
-                            );
-
-                        } finally {
-                            if (connection != null) {
-                                connection.disconnect();
-                            }
-                        }
+                        downloadAndInstallApkInternal(apkUrl, expectedDigest, updateRoot);
                     }
                 }
         );
+    }
+
+    private void downloadAndInstallApkInternal(
+            final String apkUrl,
+            final String expectedDigest,
+            final File updateRoot
+    ) {
+        File output = null;
+        HttpURLConnection connection = null;
+
+        try {
+            updateInstallInProgress = true;
+
+            File updates = new File(updateRoot, "Rena/Updates");
+            if (!updates.exists() && !updates.mkdirs()) {
+                throw new java.io.IOException(
+                        "Unable to create update directory"
+                );
+            }
+
+            output = new File(
+                    updates,
+                    "Rena-W4B-update.apk"
+            );
+
+            URL url = new URL(apkUrl);
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(30000);
+            connection.setRequestProperty(
+                    "User-Agent",
+                    NativeConfig.developerName()
+            );
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode < 200 || responseCode >= 300) {
+                throw new java.io.IOException(
+                        "APK download failed"
+                );
+            }
+
+            InputStream input = new BufferedInputStream(
+                    connection.getInputStream()
+            );
+            FileOutputStream outputStream = new FileOutputStream(output);
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+                outputStream.write(buffer, 0, read);
+            }
+
+            outputStream.flush();
+            outputStream.close();
+            input.close();
+
+            String actual = toHex(digest.digest());
+            if (!expectedDigest.equalsIgnoreCase(actual)) {
+                throw new SecurityException("APK digest mismatch");
+            }
+
+            if (!verifyApkSigner(output)) {
+                throw new SecurityException("APK signer mismatch");
+            }
+
+            final File installerFile = output;
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (!isUiAlive()) {
+                        updateInstallInProgress = false;
+                        return;
+                    }
+                    launchApkInstaller(installerFile);
+                }
+            });
+        } catch (Throwable ignored) {
+            if (output != null) {
+                try {
+                    output.delete();
+                } catch (Throwable ignoredDelete) {
+                }
+            }
+            updateInstallInProgress = false;
+
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (!isUiAlive()) {
+                        return;
+                    }
+                    Toast.makeText(
+                            MainActivity.this,
+                            NativeConfig.updateDownloadFailedText(),
+                            Toast.LENGTH_LONG
+                    ).show();
+                }
+            });
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
     }
 
     private String toHex(
@@ -7255,8 +7238,16 @@ public class MainActivity extends Activity {
                                             0f
                                     );
                                     menuButton.setAlpha(
-                                            1f
+                                            0f
                                     );
+                                    menuButton.animate()
+                                            .alpha(1f)
+                                            .setDuration(animDuration(140L))
+                                            .setInterpolator(
+                                                    new android.view.animation
+                                                            .DecelerateInterpolator()
+                                            )
+                                            .start();
 
                                     updateMenuVisibility();
                                 }
@@ -7346,19 +7337,7 @@ public class MainActivity extends Activity {
     }
     private void applyImmersiveFullscreen() {
         try {
-            if (Build.VERSION.SDK_INT >= 30) {
-                getWindow().setDecorFitsSystemWindows(false);
-            }
-
-            if (Build.VERSION.SDK_INT >= 21) {
-                int flags =
-                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
-                getWindow().getDecorView().setSystemUiVisibility(flags);
-                getWindow().setStatusBarColor(Color.TRANSPARENT);
-                getWindow().setNavigationBarColor(Color.BLACK);
-            }
+            RenaWindowHelper.applyMainWindow(this);
         } catch (Throwable ignored) {
         }
     }
@@ -7379,6 +7358,28 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+
+        if (!activityDestroyed) {
+            getWindow().getDecorView().postDelayed(
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            long now = android.os.SystemClock.elapsedRealtime();
+                            if (!isUiAlive() ||
+                                    updateCheckRunning ||
+                                    updateInstallInProgress ||
+                                    pendingUpdateApkUrl != null ||
+                                    now - lastAutomaticUpdateCheckAt < 60000L ||
+                                    !hasInternetConnection()) {
+                                return;
+                            }
+                            lastAutomaticUpdateCheckAt = now;
+                            startAutomaticUpdateCheck();
+                        }
+                    },
+                    900L
+            );
+        }
 
         boolean currentInternet = hasInternetConnection();
         if (internetAvailable && !currentInternet && webView != null) {
@@ -7448,22 +7449,7 @@ public class MainActivity extends Activity {
             }
         }
 
-        if (pendingUpdatePermissionCheck) {
-            boolean allowed =
-                    Build.VERSION.SDK_INT < 26 ||
-                    getPackageManager().canRequestPackageInstalls();
-
-            pendingUpdatePermissionCheck = false;
-
-            if (allowed) {
-                checkForUpdates();
-            } else {
-                finishUpdateCheckAnimation();
-            }
-        }
-
-        if (pendingUpdateApkUrl != null &&
-                (Build.VERSION.SDK_INT < 30 || hasAllFilesAccess())) {
+        if (pendingUpdateApkUrl != null) {
             String apkUrl = pendingUpdateApkUrl;
             String digest = pendingUpdateDigest;
 

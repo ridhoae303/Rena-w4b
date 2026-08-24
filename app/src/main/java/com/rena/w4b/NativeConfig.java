@@ -91,6 +91,9 @@ public final class NativeConfig {
     public static native String hideNotificationLabel();
     public static native String hideNotificationEnabledText();
     public static native String hideNotificationDisabledText();
+    public static native String hideBarNotificationLabel();
+    public static native String hideBarNotificationEnabledText();
+    public static native String hideBarNotificationDisabledText();
     public static native String reduceAnimationLabel();
     public static native String reduceAnimationEnabledText();
     public static native String reduceAnimationDisabledText();

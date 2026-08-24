@@ -11,6 +11,62 @@ import android.content.pm.ApplicationInfo;
  */
 public final class RenaApplication extends android.app.Application {
 
+    @Override
+    public void onCreate() {
+        super.onCreate();
+
+        registerActivityLifecycleCallbacks(
+                new android.app.Application.ActivityLifecycleCallbacks() {
+                    @Override
+                    public void onActivityCreated(
+                            android.app.Activity activity,
+                            android.os.Bundle state
+                    ) {
+                        RenaWindowHelper.applyIfEnabled(activity);
+                    }
+
+                    @Override
+                    public void onActivityStarted(
+                            android.app.Activity activity
+                    ) {
+                        RenaWindowHelper.applyIfEnabled(activity);
+                    }
+
+                    @Override
+                    public void onActivityResumed(
+                            android.app.Activity activity
+                    ) {
+                        RenaWindowHelper.applyIfEnabled(activity);
+                    }
+
+                    @Override
+                    public void onActivityPaused(
+                            android.app.Activity activity
+                    ) {
+                    }
+
+                    @Override
+                    public void onActivityStopped(
+                            android.app.Activity activity
+                    ) {
+                    }
+
+                    @Override
+                    public void onActivitySaveInstanceState(
+                            android.app.Activity activity,
+                            android.os.Bundle state
+                    ) {
+                    }
+
+                    @Override
+                    public void onActivityDestroyed(
+                            android.app.Activity activity
+                    ) {
+                    }
+                }
+        );
+    }
+
     public static boolean isApplicationIntegrityValid(Context context) {
         if (context == null) {
             return false;
