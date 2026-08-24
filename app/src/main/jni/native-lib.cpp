@@ -668,7 +668,7 @@ JNI_METHOD(fingerprintEnabledText)(JNIEnv* env, jclass) {
 
 extern "C" JNIEXPORT jstring JNICALL
 JNI_METHOD(hideNotificationLabel)(JNIEnv* env, jclass) {
-    return js(env, OBFUSCATE("Hide Notification"));
+    return js(env, OBFUSCATE("Disable Notification"));
 }
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -679,6 +679,21 @@ JNI_METHOD(hideNotificationEnabledText)(JNIEnv* env, jclass) {
 extern "C" JNIEXPORT jstring JNICALL
 JNI_METHOD(hideNotificationDisabledText)(JNIEnv* env, jclass) {
     return js(env, OBFUSCATE("Notifications are now audible."));
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+JNI_METHOD(hideBarNotificationLabel)(JNIEnv* env, jclass) {
+    return js(env, OBFUSCATE("Hide Bar Notification"));
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+JNI_METHOD(hideBarNotificationEnabledText)(JNIEnv* env, jclass) {
+    return js(env, OBFUSCATE("Android notification bar hidden."));
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+JNI_METHOD(hideBarNotificationDisabledText)(JNIEnv* env, jclass) {
+    return js(env, OBFUSCATE("Android notification bar visible."));
 }
 
 extern "C" JNIEXPORT jstring JNICALL
