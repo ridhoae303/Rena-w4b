@@ -4712,15 +4712,29 @@ public class MainActivity extends Activity {
             final String json =
                     body.toString();
 
+            final org.json.JSONObject releaseObject =
+                    new org.json.JSONObject(json);
+
             final String remoteVersion =
-                    parseJsonString(
-                            json,
-                            "tag_name"
+                    releaseObject.optString(
+                            "tag_name",
+                            ""
+                    );
+
+            final String releaseName =
+                    releaseObject.optString(
+                            "name",
+                            ""
+                    );
+
+            final String releaseNotes =
+                    releaseObject.optString(
+                            "body",
+                            ""
                     );
 
             final int remoteCode =
-                    parseJsonInt(
-                            json,
+                    releaseObject.optInt(
                             "versionCode",
                             -1
                     );
@@ -4804,6 +4818,8 @@ public class MainActivity extends Activity {
 
                             showUpdateDialog(
                                     remoteVersion,
+                                    releaseName,
+                                    releaseNotes,
                                     apkUrl,
                                     digest
                             );
@@ -5096,36 +5112,281 @@ public class MainActivity extends Activity {
 
     private void showUpdateDialog(
             final String version,
+            final String releaseName,
+            final String releaseNotes,
             final String apkUrl,
             final String digest
     ) {
-        new AlertDialog.Builder(this)
-                .setTitle(
-                        NativeConfig.updateAvailableTitle()
+        int screenHeight =
+                getResources()
+                        .getDisplayMetrics()
+                        .heightPixels;
+
+        int scrollHeight =
+                Math.min(
+                        dp(320),
+                        Math.max(
+                                dp(190),
+                                (int) (screenHeight * 0.42f)
+                        )
+                );
+
+        LinearLayout content =
+                new LinearLayout(this);
+        content.setOrientation(
+                LinearLayout.VERTICAL
+        );
+        content.setPadding(
+                dp(2),
+                0,
+                dp(2),
+                0
+        );
+
+        String cleanVersion =
+                TextUtils.isEmpty(version)
+                        ? getInstalledVersionName()
+                        : version;
+
+        String meta =
+                "Version " +
+                stripVersionPrefix(cleanVersion);
+
+        if (!TextUtils.isEmpty(releaseName) &&
+                !releaseName.equalsIgnoreCase(cleanVersion)) {
+            meta += "\n" + releaseName.trim();
+        }
+
+        TextView versionView =
+                text(
+                        meta,
+                        16,
+                        Color.WHITE
+                );
+        versionView.setGravity(
+                Gravity.TOP
+        );
+        versionView.setPadding(
+                dp(4),
+                dp(2),
+                dp(4),
+                dp(12)
+        );
+
+        TextView notesLabel =
+                text(
+                        "What's new",
+                        14,
+                        Color.rgb(60, 163, 124)
+                );
+        notesLabel.setGravity(
+                Gravity.CENTER_VERTICAL
+        );
+        notesLabel.setTypeface(
+                getAppFont(
+                        android.graphics.Typeface.BOLD
                 )
-                .setMessage(
-                        version
+        );
+        notesLabel.setPadding(
+                dp(4),
+                dp(2),
+                dp(4),
+                dp(8)
+        );
+
+        ScrollView notesScroll =
+                new ScrollView(this);
+        notesScroll.setFillViewport(true);
+        notesScroll.setVerticalScrollBarEnabled(false);
+        notesScroll.setHorizontalScrollBarEnabled(false);
+        notesScroll.setOverScrollMode(
+                View.OVER_SCROLL_IF_CONTENT_SCROLLS
+        );
+
+        TextView notesView =
+                text(
+                        formatReleaseNotes(releaseNotes),
+                        14,
+                        Color.argb(
+                                220,
+                                255,
+                                255,
+                                255
+                        )
+                );
+        notesView.setGravity(
+                Gravity.TOP | Gravity.START
+        );
+        notesView.setLineSpacing(
+                dp(2),
+                1.04f
+        );
+        notesView.setPadding(
+                dp(12),
+                dp(10),
+                dp(12),
+                dp(12)
+        );
+
+        notesScroll.addView(
+                notesView,
+                new ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
                 )
-                .setNegativeButton(
-                        NativeConfig.cancelText(),
-                        null
+        );
+
+        content.addView(
+                versionView,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
                 )
-                .setPositiveButton(
-                        NativeConfig.downloadUpdateText(),
-                        new android.content.DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(
-                                    android.content.DialogInterface dialog,
-                                    int which
-                            ) {
-                                downloadAndInstallApk(
-                                        apkUrl,
-                                        digest
-                                );
-                            }
+        );
+        content.addView(
+                notesLabel,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+        );
+        content.addView(
+                notesScroll,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        scrollHeight
+                )
+        );
+
+        final AlertDialog dialog =
+                new AlertDialog.Builder(this)
+                        .setTitle(
+                                NativeConfig.updateAvailableTitle()
+                        )
+                        .setView(content)
+                        .setNegativeButton(
+                                NativeConfig.cancelText(),
+                                null
+                        )
+                        .setPositiveButton(
+                                NativeConfig.downloadUpdateText(),
+                                new android.content.DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(
+                                            android.content.DialogInterface dialog,
+                                            int which
+                                    ) {
+                                        downloadAndInstallApk(
+                                                apkUrl,
+                                                digest
+                                        );
+                                    }
+                                }
+                        )
+                        .create();
+
+        dialog.setOnShowListener(
+                new android.content.DialogInterface.OnShowListener() {
+                    @Override
+                    public void onShow(
+                            android.content.DialogInterface ignored
+                    ) {
+                        if (dialog.getButton(
+                                AlertDialog.BUTTON_NEGATIVE
+                        ) != null) {
+                            dialog.getButton(
+                                    AlertDialog.BUTTON_NEGATIVE
+                            ).setAllCaps(true);
                         }
-                )
-                .show();
+                        if (dialog.getButton(
+                                AlertDialog.BUTTON_POSITIVE
+                        ) != null) {
+                            dialog.getButton(
+                                    AlertDialog.BUTTON_POSITIVE
+                            ).setAllCaps(true);
+                        }
+                    }
+                }
+        );
+
+        dialog.show();
+
+        if (dialog.getWindow() != null) {
+            int screenWidth =
+                    getResources()
+                            .getDisplayMetrics()
+                            .widthPixels;
+
+            int width =
+                    Math.min(
+                            dp(540),
+                            Math.max(
+                                    dp(280),
+                                    screenWidth - dp(32)
+                            )
+                    );
+
+            dialog.getWindow().setLayout(
+                    width,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+            );
+        }
+    }
+
+    private String formatReleaseNotes(
+            String notes
+    ) {
+        if (TextUtils.isEmpty(notes)) {
+            return "No release notes were provided for this release.";
+        }
+
+        String value =
+                notes.replace(
+                        "\r\n",
+                        "\n"
+                ).replace(
+                        "\r",
+                        "\n"
+                ).trim();
+
+        if (value.length() == 0) {
+            return "No release notes were provided for this release.";
+        }
+
+        value = value.replaceAll(
+                "\\[([^\\]]+)\\]\\(([^\\)]+)\\)",
+                "$1"
+        );
+        value = value.replaceAll(
+                "`([^`]+)`",
+                "$1"
+        );
+        value = value.replaceAll(
+                "\\*\\*([^*]+)\\*\\*",
+                "$1"
+        );
+        value = value.replaceAll(
+                "__([^_]+)__",
+                "$1"
+        );
+        value = value.replaceAll(
+                "(?m)^\\s{0,3}#{1,6}\\s*",
+                ""
+        );
+        value = value.replaceAll(
+                "(?m)^\\s*[-*+]\\s+",
+                "• "
+        );
+        value = value.replaceAll(
+                "(?m)^\\s*[-_=]{3,}\\s*$",
+                ""
+        );
+        value = value.replaceAll(
+                "\\n{3,}",
+                "\\n\\n"
+        );
+
+        return value.trim();
     }
 
     private void downloadAndInstallApk(
