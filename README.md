@@ -64,11 +64,13 @@ The project also has a native C++ layer for protected config strings and app int
 - Dedicated **Check for Updates** action with its own icon resource
 - Dedicated **Refresh** action with its own separate icon resource
 - Zoom mode toggle
+- App Lock
 - WhatsApp Web downloads through Android's download flow
 - Camera and microphone permission handling
 - Android 13+ notification permission support
 - Optional battery optimization prompt for long-running sessions
 - Fullscreen / immersive UI
+- Hide Notification Bar toggle
 - Hardware-accelerated WebView rendering
 - Data Manager for profile cookies, Web Storage, cache, and related web data
 - Native application integrity gate
