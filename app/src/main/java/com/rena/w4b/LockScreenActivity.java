@@ -316,10 +316,10 @@ public class LockScreenActivity extends Activity {
         try {
             android.hardware.biometrics.BiometricPrompt prompt =
                     new android.hardware.biometrics.BiometricPrompt.Builder(this)
-                            .setTitle("Unlock Rena W4B")
-                            .setSubtitle("Use fingerprint to unlock")
+                            .setTitle(NativeConfig.unlockDialogTitle())
+                            .setSubtitle(NativeConfig.unlockDialogSubtitle())
                             .setNegativeButton(
-                                    "Cancel",
+                                    NativeConfig.cancelText(),
                                     createMainThreadExecutor(),
                                     new android.content.DialogInterface.OnClickListener() {
                                         @Override
@@ -399,10 +399,10 @@ public class LockScreenActivity extends Activity {
 
             legacyFingerprintDialog =
                     new android.app.AlertDialog.Builder(this)
-                            .setTitle("Unlock Rena W4B")
-                            .setMessage("Touch the fingerprint sensor to unlock.")
+                            .setTitle(NativeConfig.unlockDialogTitle())
+                            .setMessage(NativeConfig.fingerprintTouchUnlockText())
                             .setNegativeButton(
-                                    "Cancel",
+                                    NativeConfig.cancelText(),
                                     new android.content.DialogInterface.OnClickListener() {
                                         @Override
                                         public void onClick(

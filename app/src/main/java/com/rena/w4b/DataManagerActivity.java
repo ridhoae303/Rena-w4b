@@ -143,9 +143,7 @@ public class DataManagerActivity extends Activity {
         TextView cookies =
                 action(NativeConfig.dataCookiesText());
         root.addView(cookies, row());
-        root.addView(description(
-                "Clears cookies and Web Storage for the current WebView profile. You will be signed out of the current web session."
-        ), descriptionRow());
+        root.addView(description(NativeConfig.dataCookiesDescription()), descriptionRow());
         bind(cookies, new Runnable() {
             @Override
             public void run() {
@@ -156,9 +154,7 @@ public class DataManagerActivity extends Activity {
         TextView cache =
                 action(NativeConfig.dataCacheText());
         root.addView(cache, row());
-        root.addView(description(
-                "Clears WebView and application cache files. Cookies and the current login session are kept."
-        ), descriptionRow());
+        root.addView(description(NativeConfig.dataCacheDescription()), descriptionRow());
         bind(cache, new Runnable() {
             @Override
             public void run() {
@@ -169,9 +165,7 @@ public class DataManagerActivity extends Activity {
         TextView all =
                 action(NativeConfig.dataAllWebText());
         root.addView(all, row());
-        root.addView(description(
-                "Clears cookies, Web Storage, WebView cache, and related web data for the current profile. Downloaded files in Rena are kept."
-        ), descriptionRow());
+        root.addView(description(NativeConfig.dataAllWebDescription()), descriptionRow());
         bind(all, new Runnable() {
             @Override
             public void run() {

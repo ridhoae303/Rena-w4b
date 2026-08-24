@@ -7576,7 +7576,8 @@ public class MainActivity extends Activity {
         try {
             return RenaApplication.isApplicationIntegrityValid(this) &&
                     NativeConfig.isNativeAvailable() &&
-                    NativeConfig.verifyIntegrity(this);
+                    NativeConfig.verifyIntegrity(this) &&
+                    NativeConfig.verifyRuntimeBinding(this);
         } catch (Throwable ignored) {
             return false;
         }

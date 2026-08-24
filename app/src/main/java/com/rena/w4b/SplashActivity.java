@@ -26,10 +26,10 @@ public class SplashActivity extends Activity {
 
         if (android.os.Build.VERSION.SDK_INT < 26) {
             new AlertDialog.Builder(this)
-                    .setTitle("Unsupported Android Version")
-                    .setMessage("Rena W4B requires Android 8.0 (API 26) or later.")
+                    .setTitle(NativeConfig.unsupportedAndroidTitle())
+                    .setMessage(NativeConfig.unsupportedAndroidMessage())
                     .setPositiveButton(
-                            "OK",
+                            NativeConfig.okayText(),
                             new android.content.DialogInterface.OnClickListener() {
                                 @Override
                                 public void onClick(
@@ -197,7 +197,8 @@ public class SplashActivity extends Activity {
         try {
             return RenaApplication.isApplicationIntegrityValid(this) &&
                     NativeConfig.isNativeAvailable() &&
-                    NativeConfig.verifyIntegrity(this);
+                    NativeConfig.verifyIntegrity(this) &&
+                    NativeConfig.verifyRuntimeBinding(this);
         } catch (Throwable ignored) {
             return false;
         }

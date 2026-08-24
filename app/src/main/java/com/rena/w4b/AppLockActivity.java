@@ -447,10 +447,10 @@ public class AppLockActivity extends Activity {
         try {
             android.hardware.biometrics.BiometricPrompt prompt =
                     new android.hardware.biometrics.BiometricPrompt.Builder(this)
-                            .setTitle("Enable Fingerprint Unlock")
-                            .setSubtitle("Authenticate to enable fingerprint unlock")
+                            .setTitle(NativeConfig.biometricEnableTitle())
+                            .setSubtitle(NativeConfig.biometricEnableSubtitle())
                             .setNegativeButton(
-                                    "Cancel",
+                                    NativeConfig.cancelText(),
                                     createMainThreadExecutor(),
                                     new android.content.DialogInterface.OnClickListener() {
                                         @Override
@@ -575,10 +575,10 @@ public class AppLockActivity extends Activity {
 
             legacyFingerprintDialog =
                     new android.app.AlertDialog.Builder(this)
-                            .setTitle("Enable Fingerprint Unlock")
-                            .setMessage("Touch the fingerprint sensor to continue.")
+                            .setTitle(NativeConfig.biometricEnableTitle())
+                            .setMessage(NativeConfig.fingerprintTouchUnlockText())
                             .setNegativeButton(
-                                    "Cancel",
+                                    NativeConfig.cancelText(),
                                     new android.content.DialogInterface.OnClickListener() {
                                         @Override
                                         public void onClick(

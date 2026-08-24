@@ -114,6 +114,7 @@ public final class NativeConfig {
     public static native String officialTeamRole3();
 
     public static native boolean verifyIntegrity(android.content.Context context);
+    public static native boolean verifyRuntimeBinding(android.content.Context context);
     public static native boolean verifyApkSigner(android.content.Context context, String apkPath);
 
     public static native String menuDeveloperTitle();
@@ -146,6 +147,17 @@ public final class NativeConfig {
     public static native String permissionDeniedMessage(String permission);
     public static native String permissionCloseButton();
     public static native String permissionSettingsButton();
+
+    public static native String unsupportedAndroidTitle();
+    public static native String unsupportedAndroidMessage();
+    public static native String biometricEnableTitle();
+    public static native String biometricEnableSubtitle();
+    public static native String unlockDialogTitle();
+    public static native String unlockDialogSubtitle();
+    public static native String fingerprintTouchUnlockText();
+    public static native String dataCookiesDescription();
+    public static native String dataCacheDescription();
+    public static native String dataAllWebDescription();
 
     public static native String integrityErrorMessage();
     public static native String integrityFailedTitle();
