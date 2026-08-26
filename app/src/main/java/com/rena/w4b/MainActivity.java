@@ -45,6 +45,17 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.text.TextUtils;
+import android.text.Spannable;
+import android.text.SpannableStringBuilder;
+import android.text.method.LinkMovementMethod;
+import android.text.style.BackgroundColorSpan;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
+import android.text.style.StrikethroughSpan;
+import android.text.style.StyleSpan;
+import android.text.style.TypefaceSpan;
+import android.text.style.URLSpan;
+import android.graphics.Typeface;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -169,6 +180,11 @@ public class MainActivity extends Activity {
     private boolean pendingUpdatePermissionCheck = false;
     private boolean updateCheckRunning = false;
     private boolean updateInstallInProgress = false;
+    private AlertDialog updateDownloadDialog;
+    private ProgressBar updateDownloadProgress;
+    private TextView updateDownloadStatus;
+    private long updateDownloadNotificationId = 94013L;
+    private long lastUpdateNotificationAt = 0L;
     private long lastAutomaticUpdateCheckAt = 0L;
     private String pendingUpdateApkUrl;
     private String pendingUpdateDigest;
@@ -256,7 +272,7 @@ public class MainActivity extends Activity {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 
-    private TextView text(String value, float sp, int color) {
+    private TextView text(CharSequence value, float sp, int color) {
         TextView t = new TextView(this);
         t.setText(value);
         t.setTextSize(sp);
@@ -2414,7 +2430,7 @@ public class MainActivity extends Activity {
     }
 
     private void switchToTab(int index) {
-        if (index < 0 || index >= tabs.size() || drawerAnimating) {
+        if (index < 0 || index >= tabs.size()) {
             return;
         }
 
@@ -2463,6 +2479,8 @@ public class MainActivity extends Activity {
             webView.setVisibility(View.GONE);
         } catch (Throwable ignored) {
         }
+
+        webView = null;
     }
 
     private void destroyActiveWebView() {
@@ -5137,10 +5155,10 @@ public class MainActivity extends Activity {
                 LinearLayout.VERTICAL
         );
         content.setPadding(
+                dp(6),
                 dp(2),
-                0,
-                dp(2),
-                0
+                dp(6),
+                dp(2)
         );
 
         String cleanVersion =
@@ -5196,19 +5214,22 @@ public class MainActivity extends Activity {
 
         ScrollView notesScroll =
                 new ScrollView(this);
-        notesScroll.setFillViewport(true);
-        notesScroll.setVerticalScrollBarEnabled(false);
+        notesScroll.setFillViewport(false);
+        notesScroll.setClipToPadding(true);
+        notesScroll.setVerticalScrollBarEnabled(true);
         notesScroll.setHorizontalScrollBarEnabled(false);
         notesScroll.setOverScrollMode(
                 View.OVER_SCROLL_IF_CONTENT_SCROLLS
         );
+        notesScroll.setPadding(0, 0, 0, 0);
+        notesScroll.setScrollBarStyle(View.SCROLLBARS_INSIDE_INSET);
 
         TextView notesView =
                 text(
                         formatReleaseNotes(releaseNotes),
                         14,
                         Color.argb(
-                                220,
+                                232,
                                 255,
                                 255,
                                 255
@@ -5218,14 +5239,18 @@ public class MainActivity extends Activity {
                 Gravity.TOP | Gravity.START
         );
         notesView.setLineSpacing(
-                dp(2),
+                dp(4),
                 1.04f
         );
+        notesView.setIncludeFontPadding(true);
         notesView.setPadding(
+                dp(14),
                 dp(12),
-                dp(10),
-                dp(12),
-                dp(12)
+                dp(14),
+                dp(16)
+        );
+        notesView.setMovementMethod(
+                LinkMovementMethod.getInstance()
         );
 
         notesScroll.addView(
@@ -5316,24 +5341,25 @@ public class MainActivity extends Activity {
                     getResources()
                             .getDisplayMetrics()
                             .widthPixels;
-
             int width =
                     Math.min(
-                            dp(540),
+                            dp(560),
                             Math.max(
-                                    dp(280),
-                                    screenWidth - dp(32)
+                                    dp(290),
+                                    screenWidth - dp(28)
                             )
                     );
+            int height =
+                    Math.min(
+                            (int) (screenHeight * 0.84f),
+                            dp(680)
+                    );
 
-            dialog.getWindow().setLayout(
-                    width,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-            );
+            dialog.getWindow().setLayout(width, height);
         }
     }
 
-    private String formatReleaseNotes(
+    private CharSequence formatReleaseNotes(
             String notes
     ) {
         if (TextUtils.isEmpty(notes)) {
@@ -5341,52 +5367,371 @@ public class MainActivity extends Activity {
         }
 
         String value =
-                notes.replace(
-                        "\r\n",
-                        "\n"
-                ).replace(
-                        "\r",
-                        "\n"
-                ).trim();
+                notes.replace("\r\n", "\n")
+                        .replace("\r", "\n")
+                        .trim();
 
         if (value.length() == 0) {
             return "No release notes were provided for this release.";
         }
 
-        value = value.replaceAll(
-                "\\[([^\\]]+)\\]\\(([^\\)]+)\\)",
-                "$1"
+        value = value.replaceAll("!\\[([^\\]]*)\\]\\([^\\)]+\\)", "$1");
+        value = value.replaceAll("<[^>]+>", "");
+
+        SpannableStringBuilder result =
+                new SpannableStringBuilder();
+
+        String[] lines = value.split("\n", -1);
+
+        for (int i = 0; i < lines.length; i++) {
+            String raw = lines[i];
+            String line = raw.trim();
+
+            if (line.matches("[-_=]{3,}")) {
+                if (i < lines.length - 1) {
+                    result.append("\n");
+                }
+                continue;
+            }
+
+            boolean heading =
+                    line.matches("^#{1,6}\\s+.*$");
+            boolean bullet =
+                    line.matches("^[-*+]\\s+.*$");
+            boolean quote =
+                    line.startsWith("> ") || line.equals(">");
+
+            if (heading) {
+                line = line.replaceFirst("^#{1,6}\\s+", "");
+            } else if (bullet) {
+                line = "• " + line.replaceFirst("^[-*+]\\s+", "");
+            } else if (quote) {
+                line = "│ " +
+                        (line.length() > 1 ? line.substring(1).trim() : "");
+            }
+
+            int lineStart = result.length();
+            appendInlineMarkdown(result, line);
+            int lineEnd = result.length();
+
+            if (heading && lineEnd > lineStart) {
+                result.setSpan(
+                        new StyleSpan(Typeface.BOLD),
+                        lineStart,
+                        lineEnd,
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+                result.setSpan(
+                        new RelativeSizeSpan(1.12f),
+                        lineStart,
+                        lineEnd,
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+                result.setSpan(
+                        new ForegroundColorSpan(Color.rgb(105, 205, 164)),
+                        lineStart,
+                        lineEnd,
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+            } else if (quote && lineEnd > lineStart) {
+                result.setSpan(
+                        new ForegroundColorSpan(Color.rgb(155, 205, 190)),
+                        lineStart,
+                        lineEnd,
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+            }
+
+            if (i < lines.length - 1) {
+                result.append("\n");
+            }
+        }
+
+        while (result.length() > 0 &&
+                result.charAt(result.length() - 1) == '\n') {
+            result.delete(result.length() - 1, result.length());
+        }
+
+        return result;
+    }
+
+    private void appendInlineMarkdown(
+            SpannableStringBuilder out,
+            String line
+    ) {
+        java.util.regex.Pattern pattern =
+                java.util.regex.Pattern.compile(
+                        "\\[([^\\]]+)\\]\\(([^\\)]+)\\)" +
+                        "|`([^`]+)`" +
+                        "|\\*\\*([^*]+)\\*\\*" +
+                        "|__([^_]+)__" +
+                        "|~~([^~]+)~~" +
+                        "|(?<!\\*)\\*([^*\\n]+)\\*(?!\\*)" +
+                        "|(?<!_)_([^_\\n]+)_(?!_)"
+                );
+
+        java.util.regex.Matcher matcher =
+                pattern.matcher(line);
+
+        int cursor = 0;
+
+        while (matcher.find()) {
+            if (matcher.start() > cursor) {
+                out.append(line.substring(cursor, matcher.start()));
+            }
+
+            int start = out.length();
+
+            if (matcher.group(1) != null) {
+                out.append(matcher.group(1));
+                out.setSpan(
+                        new URLSpan(matcher.group(2)),
+                        start,
+                        out.length(),
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+                out.setSpan(
+                        new ForegroundColorSpan(Color.rgb(106, 202, 255)),
+                        start,
+                        out.length(),
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+            } else if (matcher.group(3) != null) {
+                out.append(matcher.group(3));
+                out.setSpan(
+                        new TypefaceSpan("monospace"),
+                        start,
+                        out.length(),
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+                out.setSpan(
+                        new BackgroundColorSpan(Color.argb(42, 255, 255, 255)),
+                        start,
+                        out.length(),
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+            } else if (matcher.group(4) != null ||
+                    matcher.group(5) != null) {
+                String text = matcher.group(4) != null
+                        ? matcher.group(4)
+                        : matcher.group(5);
+                out.append(text);
+                out.setSpan(
+                        new StyleSpan(Typeface.BOLD),
+                        start,
+                        out.length(),
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+            } else if (matcher.group(6) != null) {
+                out.append(matcher.group(6));
+                out.setSpan(
+                        new StrikethroughSpan(),
+                        start,
+                        out.length(),
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+            } else if (matcher.group(7) != null ||
+                    matcher.group(8) != null) {
+                String text = matcher.group(7) != null
+                        ? matcher.group(7)
+                        : matcher.group(8);
+                out.append(text);
+                out.setSpan(
+                        new StyleSpan(Typeface.ITALIC),
+                        start,
+                        out.length(),
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+            }
+
+            cursor = matcher.end();
+        }
+
+        if (cursor < line.length()) {
+            out.append(line.substring(cursor));
+        }
+    }
+
+    private void showUpdateDownloadDialog() {
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(8), dp(8), dp(8), dp(4));
+
+        updateDownloadStatus = text("Preparing download…", 14, Color.WHITE);
+        updateDownloadStatus.setGravity(Gravity.CENTER_VERTICAL);
+        updateDownloadStatus.setPadding(dp(2), dp(2), dp(2), dp(10));
+
+        updateDownloadProgress = new ProgressBar(
+                this,
+                null,
+                android.R.attr.progressBarStyleHorizontal
         );
-        value = value.replaceAll(
-                "`([^`]+)`",
-                "$1"
+        updateDownloadProgress.setMax(1000);
+        updateDownloadProgress.setProgress(0);
+
+        content.addView(
+                updateDownloadStatus,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                )
         );
-        value = value.replaceAll(
-                "\\*\\*([^*]+)\\*\\*",
-                "$1"
-        );
-        value = value.replaceAll(
-                "__([^_]+)__",
-                "$1"
-        );
-        value = value.replaceAll(
-                "(?m)^\\s{0,3}#{1,6}\\s*",
-                ""
-        );
-        value = value.replaceAll(
-                "(?m)^\\s*[-*+]\\s+",
-                "• "
-        );
-        value = value.replaceAll(
-                "(?m)^\\s*[-_=]{3,}\\s*$",
-                ""
-        );
-        value = value.replaceAll(
-                "\\n{3,}",
-                "\\n\\n"
+        content.addView(
+                updateDownloadProgress,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(8)
+                )
         );
 
-        return value.trim();
+        updateDownloadDialog = new AlertDialog.Builder(this)
+                .setTitle("Downloading update")
+                .setView(content)
+                .create();
+
+        updateDownloadDialog.setCanceledOnTouchOutside(false);
+        updateDownloadDialog.show();
+
+        if (updateDownloadDialog.getWindow() != null) {
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            int width = Math.min(
+                    dp(420),
+                    Math.max(dp(280), screenWidth - dp(40))
+            );
+            updateDownloadDialog.getWindow().setLayout(
+                    width,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+            );
+        }
+    }
+
+    private void updateDownloadUi(
+            final long downloaded,
+            final long total
+    ) {
+        runOnUiThread(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!isUiAlive()) {
+                            return;
+                        }
+
+                        int progressValue = 0;
+                        if (total > 0L) {
+                            progressValue = (int) Math.max(
+                                    0L,
+                                    Math.min(
+                                            1000L,
+                                            downloaded * 1000L / total
+                                    )
+                            );
+                        }
+
+                        if (updateDownloadProgress != null) {
+                            updateDownloadProgress.setProgress(progressValue);
+                        }
+
+                        if (updateDownloadStatus != null) {
+                            if (total > 0L) {
+                                updateDownloadStatus.setText(
+                                        formatBytes(downloaded) + " / " + formatBytes(total) +
+                                                "  •  " + (progressValue / 10) + "%"
+                                );
+                            } else {
+                                updateDownloadStatus.setText(
+                                        formatBytes(downloaded) + " downloaded"
+                                );
+                            }
+                        }
+                    }
+                }
+        );
+    }
+
+    private String formatBytes(long value) {
+        if (value < 1024L) {
+            return value + " B";
+        }
+        if (value < 1024L * 1024L) {
+            return String.format(Locale.US, "%.1f KB", value / 1024.0);
+        }
+        if (value < 1024L * 1024L * 1024L) {
+            return String.format(Locale.US, "%.1f MB", value / (1024.0 * 1024.0));
+        }
+        return String.format(Locale.US, "%.2f GB", value / (1024.0 * 1024.0 * 1024.0));
+    }
+
+    private void showUpdateDownloadNotification(long downloaded, long total, boolean finished) {
+        long now = System.currentTimeMillis();
+        if (!finished && now - lastUpdateNotificationAt < 250L) {
+            return;
+        }
+        lastUpdateNotificationAt = now;
+        try {
+            NotificationManager manager =
+                    (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (manager == null) {
+                return;
+            }
+
+            if (Build.VERSION.SDK_INT >= 26) {
+                NotificationChannel channel = new NotificationChannel(
+                        "rena_updates",
+                        "App Updates",
+                        NotificationManager.IMPORTANCE_LOW
+                );
+                manager.createNotificationChannel(channel);
+            }
+
+            Notification.Builder builder = Build.VERSION.SDK_INT >= 26
+                    ? new Notification.Builder(this, "rena_updates")
+                    : new Notification.Builder(this);
+
+            builder.setSmallIcon(getApplicationInfo().icon)
+                    .setContentTitle("Rena update")
+                    .setOngoing(!finished)
+                    .setOnlyAlertOnce(true);
+
+            if (finished) {
+                builder.setContentText("Download complete. Preparing installation…")
+                        .setProgress(0, 0, false);
+            } else if (total > 0L) {
+                int progressValue = (int) Math.max(
+                        0L,
+                        Math.min(100L, downloaded * 100L / total)
+                );
+                builder.setContentText(
+                                formatBytes(downloaded) + " / " + formatBytes(total)
+                        )
+                        .setProgress(100, progressValue, false);
+            } else {
+                builder.setContentText(formatBytes(downloaded) + " downloaded")
+                        .setProgress(0, 0, true);
+            }
+
+            manager.notify((int) updateDownloadNotificationId, builder.build());
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void finishUpdateDownloadUi(boolean success) {
+        runOnUiThread(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        if (updateDownloadDialog != null) {
+                            try {
+                                updateDownloadDialog.dismiss();
+                            } catch (Throwable ignored) {
+                            }
+                            updateDownloadDialog = null;
+                        }
+                        updateDownloadProgress = null;
+                        updateDownloadStatus = null;
+                    }
+                }
+        );
     }
 
     private void downloadAndInstallApk(
@@ -5439,6 +5784,9 @@ public class MainActivity extends Activity {
             return;
         }
 
+        showUpdateDownloadDialog();
+        showUpdateDownloadNotification(0L, 0L, false);
+
         AsyncTask.execute(
                 new Runnable() {
                     @Override
@@ -5488,6 +5836,7 @@ public class MainActivity extends Activity {
                 );
             }
 
+            long totalBytes = connection.getContentLengthLong();
             InputStream input = new BufferedInputStream(
                     connection.getInputStream()
             );
@@ -5495,10 +5844,14 @@ public class MainActivity extends Activity {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
 
             byte[] buffer = new byte[8192];
+            long downloadedBytes = 0L;
             int read;
             while ((read = input.read(buffer)) != -1) {
                 digest.update(buffer, 0, read);
                 outputStream.write(buffer, 0, read);
+                downloadedBytes += read;
+                updateDownloadUi(downloadedBytes, totalBytes);
+                showUpdateDownloadNotification(downloadedBytes, totalBytes, false);
             }
 
             outputStream.flush();
@@ -5515,6 +5868,8 @@ public class MainActivity extends Activity {
             }
 
             final File installerFile = output;
+            showUpdateDownloadNotification(1L, 1L, true);
+            finishUpdateDownloadUi(true);
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
@@ -5533,6 +5888,7 @@ public class MainActivity extends Activity {
                 }
             }
             updateInstallInProgress = false;
+            finishUpdateDownloadUi(false);
 
             runOnUiThread(new Runnable() {
                 @Override
@@ -6366,11 +6722,8 @@ public class MainActivity extends Activity {
         }
 
         WebSettings settings = webView.getSettings();
-
         settings.setSupportZoom(enabled);
-
-        // The built-in zoom mechanism stays initialized for the WebView's
-        // lifetime. We only change whether user zoom is allowed.
+        settings.setBuiltInZoomControls(enabled);
         settings.setDisplayZoomControls(false);
 
         if (enabled) {
@@ -6382,14 +6735,69 @@ public class MainActivity extends Activity {
                     baselineScale = 1.0f;
                 }
             }
+            applyEnhancedZoomViewport();
         } else {
-            /*
-             * Return to the exact baseline instead of merely disabling the
-             * zoom controls. Disabling the checkbox does not itself reset the
-             * viewport, so we step the WebView back toward the baseline.
-             */
+            restoreOriginalViewport();
             resetZoomToBaseline();
         }
+    }
+
+    private void applyEnhancedZoomViewport() {
+        if (webView == null || !zoomEnabled) {
+            return;
+        }
+
+        final String script =
+                "(function(){" +
+                "var m=document.querySelector('meta[name=\"viewport\"]');" +
+                "if(!m){m=document.createElement('meta');m.name='viewport';" +
+                "document.head&&document.head.appendChild(m);}" +
+                "if(!m){return;}" +
+                "if(!m.getAttribute('data-rena-original')){" +
+                "m.setAttribute('data-rena-original',m.getAttribute('content')||'');" +
+                "}" +
+                "var c=m.getAttribute('content')||'';" +
+                "var parts=c.split(',').map(function(v){return v.trim();}).filter(function(v){return v.length>0;});" +
+                "var out=[];var hasWidth=false;var hasInitial=false;" +
+                "for(var i=0;i<parts.length;i++){var lower=parts[i].toLowerCase();" +
+                "if(lower.indexOf('width=')===0){hasWidth=true;out.push(parts[i]);}" +
+                "else if(lower.indexOf('initial-scale=')===0){hasInitial=true;out.push(parts[i]);}" +
+                "else if(lower.indexOf('minimum-scale=')===0||lower.indexOf('maximum-scale=')===0||lower.indexOf('user-scalable=')===0){}" +
+                "else{out.push(parts[i]);}}" +
+                "if(!hasWidth){out.push('width=device-width');}" +
+                "if(!hasInitial){out.push('initial-scale=1');}" +
+                "out.push('minimum-scale=0.25');out.push('maximum-scale=10');out.push('user-scalable=yes');" +
+                "m.setAttribute('content',out.join(', '));" +
+                "})();";
+
+        try {
+            webView.evaluateJavascript(
+                    script,
+                    null
+            );
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void restoreOriginalViewport() {
+        if (webView == null) {
+            return;
+        }
+
+        final String script =
+                "(function(){var m=document.querySelector('meta[name=\"viewport\"]');" +
+                "if(!m){return;}var o=m.getAttribute('data-rena-original');" +
+                "if(o!==null){m.setAttribute('content',o);m.removeAttribute('data-rena-original');}" +
+                "})();";
+
+        try {
+            webView.evaluateJavascript(
+                    script,
+                    null
+            );
+        } catch (Throwable ignored) {
+        }
+
     }
 
     @SuppressWarnings("deprecation")
@@ -6399,7 +6807,7 @@ public class MainActivity extends Activity {
         }
 
         try {
-            final int maxSteps = 18;
+            final int maxSteps = 24;
 
             for (int i = 0; i < maxSteps; i++) {
                 float current = webView.getScale();
@@ -6508,6 +6916,7 @@ public class MainActivity extends Activity {
                 null
         );
     }
+
 
     private final class NotificationBridge {
         @JavascriptInterface
@@ -6894,10 +7303,8 @@ public class MainActivity extends Activity {
         settings.setSupportMultipleWindows(false);
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
-        // Keep Chromium's zoom machinery initialized for the lifetime of
-        // the WebView. Only supportZoom is toggled at runtime; scale changes
-        // are never modified from a WebViewClient scale callback.
-        settings.setBuiltInZoomControls(true);
+        settings.setSupportZoom(zoomEnabled);
+        settings.setBuiltInZoomControls(zoomEnabled);
         settings.setDisplayZoomControls(false);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
@@ -6919,8 +7326,6 @@ public class MainActivity extends Activity {
                     true
             );
         }
-
-        // Let WebView/Chromium manage its own rendering layer.
 
         webView.setWebChromeClient(
                 new WebChromeClient() {
@@ -7011,6 +7416,9 @@ public class MainActivity extends Activity {
                                 View.GONE
                         );
 
+                        if (zoomEnabled) {
+                            applyEnhancedZoomViewport();
+                        }
                         captureBaselineIfNeeded();
 
                         if (!historyFloorApplied) {
