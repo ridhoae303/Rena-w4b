@@ -34,6 +34,7 @@
     <uses-permission android:name="android.permission.USE_FINGERPRINT" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
+    <uses-permission android:name="com.android.vending.CHECK_LICENSE" />
     <application
         android:name="com.rena.w4b.RenaApplication"
         android:appCategory="social"
@@ -109,6 +110,5 @@
             android:authorities="com.rena.w4b.updates"
             android:exported="false"
             android:grantUriPermissions="true" />
-    <uses-permission android:name="com.android.vending.CHECK_LICENSE" />
     </application>
 </manifest>
