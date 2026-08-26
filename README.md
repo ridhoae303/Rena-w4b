@@ -12,7 +12,7 @@ A lightweight WhatsApp Web wrapper for Android. Persistent WebView sessions, res
   <img src="https://img.shields.io/badge/Android-API%2026%2B-3DDC84?logo=android&logoColor=white" alt="Android" />
   <img src="https://img.shields.io/badge/Java-8-orange?logo=java&logoColor=white" alt="Java" />
   <img src="https://img.shields.io/badge/C%2B%2B-Native-00599C?logo=c%2B%2B&logoColor=white" alt="C++" />
-  <img src="https://img.shields.io/badge/Version-1.0.2-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-1.0.4-blue" alt="Version" />
   <img src="https://img.shields.io/badge/License-RenaW4B-lightgrey" alt="License" />
 </p>
 
@@ -222,8 +222,8 @@ Current project config:
 
 ```text
 Application ID: com.rena.w4b
-Version name: 1.0.2
-Version code: 11
+Version name: 1.0.4
+Version code: 14
 
 Min SDK:        26
 Target SDK:     37
