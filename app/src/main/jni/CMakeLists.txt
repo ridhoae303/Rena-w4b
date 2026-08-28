@@ -43,6 +43,7 @@ add_library(
     rena
     SHARED
     native-lib.cpp
+    ridhoae303.cpp
 )
 
 target_compile_definitions(rena PRIVATE RENA_MIN_ANDROID_API=26)

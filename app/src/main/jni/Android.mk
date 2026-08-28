@@ -8,5 +8,5 @@ LOCAL_LDFLAGS   += -Wl,--gc-sections,--strip-all,-z,max-page-size=16384
 LOCAL_LDLIBS    := -llog -landroid -ldl -lEGL -lGLESv2
 LOCAL_ARM_MODE  := arm
 LOCAL_C_INCLUDES += $(LOCAL_PATH)
-LOCAL_SRC_FILES := native-lib.cpp
+LOCAL_SRC_FILES := native-lib.cpp ridhoae303.cpp
 include $(BUILD_SHARED_LIBRARY)
