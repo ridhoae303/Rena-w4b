@@ -114,6 +114,54 @@ public final class RenaSettingsStore {
         );
     }
 
+
+    public static String getString(Context context, String key, String fallback) {
+        String value = get(context, key);
+        return value == null ? fallback : value;
+    }
+
+    public static long getLong(Context context, String key, long fallback) {
+        String value = get(context, key);
+        if (value == null) return fallback;
+        try { return Long.parseLong(value); } catch (Throwable ignored) { return fallback; }
+    }
+
+    public static void putString(Context context, String key, String value) {
+        put(context, key, value == null ? "" : value);
+    }
+
+    public static void putLong(Context context, String key, long value) {
+        put(context, key, String.valueOf(value));
+    }
+
+    public static void remove(Context context, String key) {
+        File file = file(context);
+        try {
+            RandomAccessFile random = new RandomAccessFile(file, "rw");
+            FileChannel channel = random.getChannel();
+            java.nio.channels.FileLock lock = channel.lock();
+            try {
+                Properties properties = new Properties();
+                if (file.length() > 0) {
+                    FileInputStream input = new FileInputStream(file);
+                    try { properties.load(input); } finally { input.close(); }
+                }
+                properties.remove(key);
+                channel.truncate(0);
+                channel.position(0);
+                java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+                properties.store(bytes, null);
+                channel.write(java.nio.ByteBuffer.wrap(bytes.toByteArray()));
+                channel.force(true);
+            } finally {
+                try { lock.release(); } catch (Throwable ignored) {}
+                try { channel.close(); } catch (Throwable ignored) {}
+                try { random.close(); } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
     private static String get(
             Context context,
             String key

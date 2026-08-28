@@ -1,6 +1,8 @@
 package com.rena.w4b;
 
-import android.app.Activity;
+
+
+import com.ridhoae303.expert.Takane;import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
@@ -79,7 +81,9 @@ public class SplashActivity extends Activity {
         }
 
         if (!integrityGate()) {
-            showIntegrityFailure();
+            // Native integrity enforcement is authoritative. Do not surface a
+            // Java-side false-positive integrity dialog.
+            closeTaskSafely();
             return;
         }
 
@@ -195,10 +199,13 @@ public class SplashActivity extends Activity {
     }
     private boolean integrityGate() {
         try {
-            return RenaApplication.isApplicationIntegrityValid(this) &&
-                    NativeConfig.isNativeAvailable() &&
-                    NativeConfig.verifyIntegrity(this) &&
-                    NativeConfig.verifyRuntimeBinding(this);
+            /*
+             * Takane.b(...) is the authoritative integrity gate and is
+             * implemented by ridhoae303.cpp inside librena.so.
+             * Avoid duplicating Java/native runtime checks here because they
+             * can report a false positive on otherwise valid installations.
+             */
+            return NativeConfig.isNativeAvailable() && Takane.b(this);
         } catch (Throwable ignored) {
             return false;
         }

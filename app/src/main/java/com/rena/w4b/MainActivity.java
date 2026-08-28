@@ -1,6 +1,8 @@
 package com.rena.w4b;
 
-import android.Manifest;
+
+
+import com.ridhoae303.expert.Takane;import android.Manifest;
 import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -177,17 +179,32 @@ public class MainActivity extends Activity {
     private float baselineScale = 1.0f;
     private boolean baselineScaleCaptured = false;
     private final AtomicBoolean updaterRunning = new AtomicBoolean(false);
-    private boolean pendingUpdatePermissionCheck = false;
     private boolean updateCheckRunning = false;
     private boolean updateInstallInProgress = false;
+    private long updateDownloadId = -1L;
+    private boolean updateDownloadHidden = false;
+    private final android.os.Handler updateHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable updatePollRunnable;
+    private String pendingUpdateVersion;
+    private String pendingInstalledCleanupPath;
+    private String pendingInstalledCleanupVersion;
+    private boolean startupFlowFinished = false;
+    private static final long AUTOMATIC_UPDATE_CHECK_INTERVAL_MS = 6L * 60L * 60L * 1000L;
+    private static final String PREF_UPDATE_LAST_AUTO_CHECK = "update_last_auto_check";
+    private static final String PREF_UPDATE_LAST_OFFERED_TAG = "update_last_offered_tag";
+    private static final String PREF_UPDATE_PENDING_PATH = "update_pending_path";
+    private static final String PREF_UPDATE_PENDING_VERSION = "update_pending_version";
+    private static final String PREF_UPDATE_READY = "update_ready";
     private AlertDialog updateDownloadDialog;
     private ProgressBar updateDownloadProgress;
     private TextView updateDownloadStatus;
     private long updateDownloadNotificationId = 94013L;
     private long lastUpdateNotificationAt = 0L;
-    private long lastAutomaticUpdateCheckAt = 0L;
     private String pendingUpdateApkUrl;
     private String pendingUpdateDigest;
+    private String pendingUpdateReleaseName;
+    private String pendingUpdateReleaseNotes;
+    private boolean pendingAutomaticUpdateDialog = false;
     private int pendingStartupPermissionAfterSettings = -1;
     private int pendingSpecialPermissionStage = -1;
     private int activePermissionIndex = -1;
@@ -365,15 +382,14 @@ public class MainActivity extends Activity {
                 this, "reduce_animation", false
         );
         restoreTabMetadata();
+        loadPendingUpdateCleanupState();
+        cleanupInstalledUpdateArtifact();
 
         if (!NativeConfig.isNativeAvailable() || !integrityGate()) {
-            // A failed integrity check deserves the same calm dialog style as
-            // the rest of the app, then the process is closed cleanly.
-            if (NativeConfig.isNativeAvailable()) {
-                showIntegrityFailureDialog();
-            } else {
-                closeAppBySystem();
-            }
+            // Signature/tamper enforcement is owned by the native Takane gate.
+            // Do not show a Java-side integrity dialog for secondary checks;
+            // those checks can legitimately be unavailable on some Android builds.
+            closeAppBySystem();
             return;
         }
 
@@ -423,6 +439,28 @@ public class MainActivity extends Activity {
                     }
                 },
                 140L
+        );
+
+        // Check for updates during startup, but never compete with permission
+        // or special startup dialogs. The result is queued until those dialogs
+        // have finished.
+        root.postDelayed(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!isUiAlive() || !hasInternetConnection() || updateCheckRunning || updateInstallInProgress) {
+                            return;
+                        }
+                        long last = RenaSettingsStore.getLong(MainActivity.this, PREF_UPDATE_LAST_AUTO_CHECK, 0L);
+                        long now = System.currentTimeMillis();
+                        if (last > 0L && now - last < AUTOMATIC_UPDATE_CHECK_INTERVAL_MS) {
+                            return;
+                        }
+                        RenaSettingsStore.putLong(MainActivity.this, PREF_UPDATE_LAST_AUTO_CHECK, now);
+                        startAutomaticUpdateCheck();
+                    }
+                },
+                220L
         );
     }
 
@@ -485,7 +523,11 @@ public class MainActivity extends Activity {
                 && !isIgnoringBatteryOptimizations()
                 && !wasSpecialPromptShown(SPECIAL_PROMPT_BATTERY)) {
             showBatteryOptimizationDialog();
+            return;
         }
+
+        scheduleAutomaticUpdateCheck();
+        showPendingAutomaticUpdateDialogIfReady();
     }
 
     private boolean isIgnoringBatteryOptimizations() {
@@ -595,6 +637,7 @@ public class MainActivity extends Activity {
 
                 if (specialDialogCancelled) {
                     specialDialogCancelled = false;
+                    showPendingAutomaticUpdateDialogIfReady();
                     return;
                 }
 
@@ -802,6 +845,8 @@ public class MainActivity extends Activity {
 
                 if (hasPermission(permission)) {
                     showNextPermissionDialog(index + 1);
+                } else {
+                    showPendingAutomaticUpdateDialogIfReady();
                 }
             }
         });
@@ -1761,6 +1806,10 @@ public class MainActivity extends Activity {
     private void setHideNotifications(boolean enabled) {
         hideNotifications = enabled;
 
+        if (enabled) {
+            cancelAllWebNotifications();
+        }
+
         RenaSettingsStore.putBoolean(
                 this,
                 "hide_notifications",
@@ -2282,18 +2331,8 @@ public class MainActivity extends Activity {
             tabs.add(first);
         }
 
-        int currentId =
-                currentTabId();
-
-        activeTabIndex =
-                findTabIndexById(currentId);
-
-        if (activeTabIndex < 0) {
-            activeTabIndex =
-                    findTabIndexById(
-                            snapshot.activeTabId
-                    );
-        }
+        int restoredId = snapshot.activeTabId;
+        activeTabIndex = findTabIndexById(restoredId);
 
         if (activeTabIndex < 0) {
             activeTabIndex = 0;
@@ -4623,6 +4662,21 @@ public class MainActivity extends Activity {
                 .start();
     }
 
+    private void scheduleAutomaticUpdateCheck() {
+        if (startupFlowFinished) return;
+        startupFlowFinished = true;
+        root.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (!isUiAlive() || !hasInternetConnection() || updateCheckRunning || updateInstallInProgress) return;
+                long last = RenaSettingsStore.getLong(MainActivity.this, PREF_UPDATE_LAST_AUTO_CHECK, 0L);
+                long now = System.currentTimeMillis();
+                if (last > 0L && now - last < AUTOMATIC_UPDATE_CHECK_INTERVAL_MS) return;
+                RenaSettingsStore.putLong(MainActivity.this, PREF_UPDATE_LAST_AUTO_CHECK, now);
+                startAutomaticUpdateCheck();
+            }
+        }, 450L);
+    }
+
     private void checkForUpdates() {
         startUpdateCheck(false);
     }
@@ -4751,12 +4805,6 @@ public class MainActivity extends Activity {
                             ""
                     );
 
-            final int remoteCode =
-                    releaseObject.optInt(
-                            "versionCode",
-                            -1
-                    );
-
             final ApkAssetInfo apkAsset =
                     parseApkAsset(json);
 
@@ -4778,25 +4826,10 @@ public class MainActivity extends Activity {
                                     .set(false);
                             updateCheckRunning = false;
 
-                            int comparison;
-
-                            if (remoteCode >= 0) {
-                                int installedCode =
-                                        getInstalledVersionCode();
-
-                                comparison =
-                                        remoteCode < installedCode
-                                                ? -1
-                                                : remoteCode > installedCode
-                                                        ? 1
-                                                        : 0;
-                            } else {
-                                comparison =
-                                        compareVersions(
-                                                getInstalledVersionName(),
-                                                remoteVersion
-                                        );
-                            }
+                            int comparison = compareVersions(
+                                    getInstalledVersionName(),
+                                    remoteVersion
+                            );
 
                             if (comparison <= 0) {
                                 if (!automatic) {
@@ -4831,6 +4864,35 @@ public class MainActivity extends Activity {
                                     ).show();
                                 }
 
+                                return;
+                            }
+
+                            String lastOffered = RenaSettingsStore.getString(
+                                    MainActivity.this,
+                                    PREF_UPDATE_LAST_OFFERED_TAG,
+                                    ""
+                            );
+                            if (automatic && remoteVersion.equalsIgnoreCase(lastOffered)) {
+                                return;
+                            }
+
+                            if (automatic) {
+                                RenaSettingsStore.putString(
+                                        MainActivity.this,
+                                        PREF_UPDATE_LAST_OFFERED_TAG,
+                                        remoteVersion
+                                );
+                            }
+
+                            if (automatic && (startupInternetGateShowing ||
+                                    (activePermissionDialog != null && activePermissionDialog.isShowing()) ||
+                                    (activeSpecialDialog != null && activeSpecialDialog.isShowing()))) {
+                                pendingUpdateVersion = remoteVersion;
+                                pendingUpdateReleaseName = releaseName;
+                                pendingUpdateReleaseNotes = releaseNotes;
+                                pendingUpdateApkUrl = apkUrl;
+                                pendingUpdateDigest = digest;
+                                pendingAutomaticUpdateDialog = true;
                                 return;
                             }
 
@@ -4901,52 +4963,6 @@ public class MainActivity extends Activity {
         }
 
         return fallback;
-    }
-
-    private int getInstalledVersionCode() {
-        try {
-            PackageInfo info =
-                    getPackageManager()
-                            .getPackageInfo(
-                                    getPackageName(),
-                                    0
-                            );
-
-            if (Build.VERSION.SDK_INT >= 28) {
-                return (int) info.getLongVersionCode();
-            }
-
-            return info.versionCode;
-        } catch (Throwable ignored) {
-            return 0;
-        }
-    }
-
-    private String parseJsonString(
-            String json,
-            String key
-    ) {
-        try {
-            java.util.regex.Matcher matcher =
-                    java.util.regex.Pattern
-                            .compile(
-                                    "\\\"" +
-                                    java.util.regex.Pattern.quote(key) +
-                                    "\\\"\\s*:\\s*\\\"([^\\\"]*)\\\""
-                            )
-                            .matcher(
-                                    json
-                            );
-
-            if (matcher.find()) {
-                return matcher.group(
-                        1
-                );
-            }
-        } catch (Throwable ignored) {
-        }
-
-        return "";
     }
 
     private ApkAssetInfo parseApkAsset(String json) {
@@ -5128,6 +5144,47 @@ public class MainActivity extends Activity {
         }
     }
 
+    private TextView createCenteredDialogTitle(String title) {
+        TextView view = text(
+                title,
+                20,
+                Color.WHITE
+        );
+        view.setGravity(Gravity.CENTER);
+        view.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        view.setTypeface(getAppFont(android.graphics.Typeface.BOLD));
+        view.setPadding(dp(24), dp(18), dp(24), dp(8));
+        return view;
+    }
+
+    private void showPendingAutomaticUpdateDialogIfReady() {
+        if (!pendingAutomaticUpdateDialog || !isUiAlive()) {
+            return;
+        }
+        if (startupInternetGateShowing ||
+                (activePermissionDialog != null && activePermissionDialog.isShowing()) ||
+                (activeSpecialDialog != null && activeSpecialDialog.isShowing())) {
+            return;
+        }
+
+        final String version = pendingUpdateVersion;
+        final String releaseName = pendingUpdateReleaseName;
+        final String notes = pendingUpdateReleaseNotes;
+        final String apkUrl = pendingUpdateApkUrl;
+        final String digest = pendingUpdateDigest;
+
+        pendingAutomaticUpdateDialog = false;
+        pendingUpdateVersion = null;
+        pendingUpdateReleaseName = null;
+        pendingUpdateReleaseNotes = null;
+        pendingUpdateApkUrl = null;
+        pendingUpdateDigest = null;
+
+        if (!TextUtils.isEmpty(version) && !TextUtils.isEmpty(apkUrl) && !TextUtils.isEmpty(digest)) {
+            showUpdateDialog(version, releaseName, notes, apkUrl, digest);
+        }
+    }
+
     private void showUpdateDialog(
             final String version,
             final String releaseName,
@@ -5181,9 +5238,8 @@ public class MainActivity extends Activity {
                         16,
                         Color.WHITE
                 );
-        versionView.setGravity(
-                Gravity.TOP
-        );
+        versionView.setGravity(Gravity.CENTER);
+        versionView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
         versionView.setPadding(
                 dp(4),
                 dp(2),
@@ -5197,9 +5253,8 @@ public class MainActivity extends Activity {
                         14,
                         Color.rgb(60, 163, 124)
                 );
-        notesLabel.setGravity(
-                Gravity.CENTER_VERTICAL
-        );
+        notesLabel.setGravity(Gravity.CENTER);
+        notesLabel.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
         notesLabel.setTypeface(
                 getAppFont(
                         android.graphics.Typeface.BOLD
@@ -5261,6 +5316,14 @@ public class MainActivity extends Activity {
                 )
         );
 
+        TextView scrollHint = text(
+                "Scroll to see more",
+                12,
+                Color.argb(155, 255, 255, 255)
+        );
+        scrollHint.setGravity(Gravity.CENTER);
+        scrollHint.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+
         content.addView(
                 versionView,
                 new LinearLayout.LayoutParams(
@@ -5282,11 +5345,20 @@ public class MainActivity extends Activity {
                         scrollHeight
                 )
         );
+        content.addView(
+                scrollHint,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(28)
+                )
+        );
 
         final AlertDialog dialog =
                 new AlertDialog.Builder(this)
-                        .setTitle(
-                                NativeConfig.updateAvailableTitle()
+                        .setCustomTitle(
+                                createCenteredDialogTitle(
+                                        NativeConfig.updateAvailableTitle()
+                                )
                         )
                         .setView(content)
                         .setNegativeButton(
@@ -5301,38 +5373,20 @@ public class MainActivity extends Activity {
                                             android.content.DialogInterface dialog,
                                             int which
                                     ) {
+                                        RenaSettingsStore.putString(
+                                                MainActivity.this,
+                                                PREF_UPDATE_LAST_OFFERED_TAG,
+                                                version
+                                        );
                                         downloadAndInstallApk(
                                                 apkUrl,
-                                                digest
+                                                digest,
+                                                version
                                         );
                                     }
                                 }
                         )
                         .create();
-
-        dialog.setOnShowListener(
-                new android.content.DialogInterface.OnShowListener() {
-                    @Override
-                    public void onShow(
-                            android.content.DialogInterface ignored
-                    ) {
-                        if (dialog.getButton(
-                                AlertDialog.BUTTON_NEGATIVE
-                        ) != null) {
-                            dialog.getButton(
-                                    AlertDialog.BUTTON_NEGATIVE
-                            ).setAllCaps(true);
-                        }
-                        if (dialog.getButton(
-                                AlertDialog.BUTTON_POSITIVE
-                        ) != null) {
-                            dialog.getButton(
-                                    AlertDialog.BUTTON_POSITIVE
-                            ).setAllCaps(true);
-                        }
-                    }
-                }
-        );
 
         dialog.show();
 
@@ -5349,65 +5403,67 @@ public class MainActivity extends Activity {
                                     screenWidth - dp(28)
                             )
                     );
-            int height =
-                    Math.min(
-                            (int) (screenHeight * 0.84f),
-                            dp(680)
-                    );
-
-            dialog.getWindow().setLayout(width, height);
+            dialog.getWindow().setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
     }
 
-    private CharSequence formatReleaseNotes(
-            String notes
-    ) {
+    private CharSequence formatReleaseNotes(String notes) {
         if (TextUtils.isEmpty(notes)) {
             return "No release notes were provided for this release.";
         }
 
-        String value =
-                notes.replace("\r\n", "\n")
-                        .replace("\r", "\n")
-                        .trim();
-
-        if (value.length() == 0) {
-            return "No release notes were provided for this release.";
-        }
-
+        String value = notes.replace("\r\n", "\n").replace("\r", "\n").trim();
         value = value.replaceAll("!\\[([^\\]]*)\\]\\([^\\)]+\\)", "$1");
         value = value.replaceAll("<[^>]+>", "");
 
-        SpannableStringBuilder result =
-                new SpannableStringBuilder();
-
+        SpannableStringBuilder result = new SpannableStringBuilder();
         String[] lines = value.split("\n", -1);
+        boolean fencedCode = false;
 
         for (int i = 0; i < lines.length; i++) {
             String raw = lines[i];
             String line = raw.trim();
 
-            if (line.matches("[-_=]{3,}")) {
-                if (i < lines.length - 1) {
-                    result.append("\n");
-                }
+            if (line.startsWith("```") || line.startsWith("~~~")) {
+                fencedCode = !fencedCode;
+                if (fencedCode && result.length() > 0 && result.charAt(result.length() - 1) != '\n') result.append("\n");
+                if (i < lines.length - 1) result.append("\n");
                 continue;
             }
 
-            boolean heading =
-                    line.matches("^#{1,6}\\s+.*$");
-            boolean bullet =
-                    line.matches("^[-*+]\\s+.*$");
-            boolean quote =
-                    line.startsWith("> ") || line.equals(">");
+            if (fencedCode) {
+                int start = result.length();
+                result.append(raw);
+                if (result.length() > start) {
+                    result.setSpan(new TypefaceSpan("monospace"), start, result.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    result.setSpan(new BackgroundColorSpan(Color.argb(36, 255,255,255)), start, result.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
+                if (i < lines.length - 1) result.append("\n");
+                continue;
+            }
+
+            if (line.matches("[-_=]{3,}")) {
+                if (i < lines.length - 1) result.append("\n");
+                continue;
+            }
+
+            boolean heading = line.matches("^#{1,6}\\s*.+$");
+            boolean bullet = line.matches("^[-*+]\\s+.*$");
+            boolean ordered = line.matches("^\\d+[.)]\\s+.*$");
+            boolean task = line.matches("^[-*+]\\s+\\[[ xX]\\]\\s+.*$");
+            boolean quote = line.startsWith(">") ;
 
             if (heading) {
-                line = line.replaceFirst("^#{1,6}\\s+", "");
+                line = line.replaceFirst("^#{1,6}\\s*", "");
+            } else if (task) {
+                boolean checked = line.matches("^[-*+]\\s+\\[[xX]\\]\\s+.*$");
+                line = (checked ? "☑ " : "☐ ") + line.replaceFirst("^[-*+]\\s+\\[[ xX]\\]\\s+", "");
             } else if (bullet) {
                 line = "• " + line.replaceFirst("^[-*+]\\s+", "");
+            } else if (ordered) {
+                line = line.replaceFirst("^(\\d+)[.)]\\s+", "$1. ");
             } else if (quote) {
-                line = "│ " +
-                        (line.length() > 1 ? line.substring(1).trim() : "");
+                line = "│ " + (line.length() > 1 ? line.substring(1).trim() : "");
             }
 
             int lineStart = result.length();
@@ -5415,194 +5471,162 @@ public class MainActivity extends Activity {
             int lineEnd = result.length();
 
             if (heading && lineEnd > lineStart) {
-                result.setSpan(
-                        new StyleSpan(Typeface.BOLD),
-                        lineStart,
-                        lineEnd,
-                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                );
-                result.setSpan(
-                        new RelativeSizeSpan(1.12f),
-                        lineStart,
-                        lineEnd,
-                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                );
-                result.setSpan(
-                        new ForegroundColorSpan(Color.rgb(105, 205, 164)),
-                        lineStart,
-                        lineEnd,
-                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                );
+                result.setSpan(new StyleSpan(Typeface.BOLD), lineStart, lineEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                result.setSpan(new RelativeSizeSpan(1.18f), lineStart, lineEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                result.setSpan(new ForegroundColorSpan(Color.rgb(105, 205, 164)), lineStart, lineEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
             } else if (quote && lineEnd > lineStart) {
-                result.setSpan(
-                        new ForegroundColorSpan(Color.rgb(155, 205, 190)),
-                        lineStart,
-                        lineEnd,
-                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                );
+                result.setSpan(new ForegroundColorSpan(Color.rgb(155, 205, 190)), lineStart, lineEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
 
-            if (i < lines.length - 1) {
-                result.append("\n");
-            }
+            if (i < lines.length - 1) result.append("\n");
         }
 
-        while (result.length() > 0 &&
-                result.charAt(result.length() - 1) == '\n') {
-            result.delete(result.length() - 1, result.length());
-        }
-
+        while (result.length() > 0 && result.charAt(result.length() - 1) == '\n') result.delete(result.length() - 1, result.length());
         return result;
     }
 
-    private void appendInlineMarkdown(
-            SpannableStringBuilder out,
-            String line
-    ) {
-        java.util.regex.Pattern pattern =
-                java.util.regex.Pattern.compile(
-                        "\\[([^\\]]+)\\]\\(([^\\)]+)\\)" +
-                        "|`([^`]+)`" +
-                        "|\\*\\*([^*]+)\\*\\*" +
-                        "|__([^_]+)__" +
-                        "|~~([^~]+)~~" +
-                        "|(?<!\\*)\\*([^*\\n]+)\\*(?!\\*)" +
-                        "|(?<!_)_([^_\\n]+)_(?!_)"
-                );
+    private void appendInlineMarkdown(SpannableStringBuilder out, String line) {
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+                "\\[([^\\]]+)\\]\\(([^\\)]+)\\)" +
+                "|`([^`\\n]+)`" +
+                "|\\*\\*\\s*(.+?)\\s*\\*\\*" +
+                "|__(\\s*.+?\\s*)__" +
+                "|~~\\s*(.+?)\\s*~~" +
+                "|\\*(?!\\*)\\s*(.+?)\\s*\\*(?!\\*)" +
+                "|(?<!_)_(?!_)\\s*(.+?)\\s*_(?!_)"
+        );
 
-        java.util.regex.Matcher matcher =
-                pattern.matcher(line);
-
+        java.util.regex.Matcher matcher = pattern.matcher(line);
         int cursor = 0;
-
         while (matcher.find()) {
-            if (matcher.start() > cursor) {
-                out.append(line.substring(cursor, matcher.start()));
-            }
-
+            if (matcher.start() > cursor) out.append(line.substring(cursor, matcher.start()));
             int start = out.length();
 
             if (matcher.group(1) != null) {
                 out.append(matcher.group(1));
-                out.setSpan(
-                        new URLSpan(matcher.group(2)),
-                        start,
-                        out.length(),
-                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                );
-                out.setSpan(
-                        new ForegroundColorSpan(Color.rgb(106, 202, 255)),
-                        start,
-                        out.length(),
-                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                );
+                out.setSpan(new URLSpan(matcher.group(2)), start, out.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                out.setSpan(new ForegroundColorSpan(Color.rgb(106,202,255)), start, out.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
             } else if (matcher.group(3) != null) {
                 out.append(matcher.group(3));
-                out.setSpan(
-                        new TypefaceSpan("monospace"),
-                        start,
-                        out.length(),
-                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                );
-                out.setSpan(
-                        new BackgroundColorSpan(Color.argb(42, 255, 255, 255)),
-                        start,
-                        out.length(),
-                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                );
-            } else if (matcher.group(4) != null ||
-                    matcher.group(5) != null) {
-                String text = matcher.group(4) != null
-                        ? matcher.group(4)
-                        : matcher.group(5);
-                out.append(text);
-                out.setSpan(
-                        new StyleSpan(Typeface.BOLD),
-                        start,
-                        out.length(),
-                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                );
+                out.setSpan(new TypefaceSpan("monospace"), start, out.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                out.setSpan(new BackgroundColorSpan(Color.argb(42,255,255,255)), start, out.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            } else if (matcher.group(4) != null || matcher.group(5) != null) {
+                out.append(matcher.group(4) != null ? matcher.group(4).trim() : matcher.group(5).trim());
+                out.setSpan(new StyleSpan(Typeface.BOLD), start, out.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
             } else if (matcher.group(6) != null) {
-                out.append(matcher.group(6));
-                out.setSpan(
-                        new StrikethroughSpan(),
-                        start,
-                        out.length(),
-                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                );
-            } else if (matcher.group(7) != null ||
-                    matcher.group(8) != null) {
-                String text = matcher.group(7) != null
-                        ? matcher.group(7)
-                        : matcher.group(8);
-                out.append(text);
-                out.setSpan(
-                        new StyleSpan(Typeface.ITALIC),
-                        start,
-                        out.length(),
-                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                );
+                out.append(matcher.group(6).trim());
+                out.setSpan(new StrikethroughSpan(), start, out.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            } else if (matcher.group(7) != null || matcher.group(8) != null) {
+                out.append(matcher.group(7) != null ? matcher.group(7).trim() : matcher.group(8).trim());
+                out.setSpan(new StyleSpan(Typeface.ITALIC), start, out.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
-
             cursor = matcher.end();
         }
-
-        if (cursor < line.length()) {
-            out.append(line.substring(cursor));
-        }
+        if (cursor < line.length()) out.append(line.substring(cursor));
     }
 
     private void showUpdateDownloadDialog() {
+        if (updateDownloadDialog != null && updateDownloadDialog.isShowing()) {
+            return;
+        }
+
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(8), dp(8), dp(8), dp(4));
+        content.setGravity(Gravity.CENTER_HORIZONTAL);
+        content.setPadding(dp(10), dp(6), dp(10), dp(2));
 
         updateDownloadStatus = text("Preparing download…", 14, Color.WHITE);
-        updateDownloadStatus.setGravity(Gravity.CENTER_VERTICAL);
-        updateDownloadStatus.setPadding(dp(2), dp(2), dp(2), dp(10));
+        updateDownloadStatus.setGravity(Gravity.CENTER);
+        updateDownloadStatus.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        updateDownloadStatus.setSingleLine(false);
+        updateDownloadStatus.setPadding(0, dp(4), 0, dp(12));
 
         updateDownloadProgress = new ProgressBar(
-                this,
-                null,
-                android.R.attr.progressBarStyleHorizontal
+                this, null, android.R.attr.progressBarStyleHorizontal
         );
         updateDownloadProgress.setMax(1000);
         updateDownloadProgress.setProgress(0);
 
-        content.addView(
-                updateDownloadStatus,
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                )
+        content.addView(updateDownloadStatus, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+        LinearLayout.LayoutParams progressLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(8)
         );
-        content.addView(
-                updateDownloadProgress,
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        dp(8)
-                )
-        );
+        progressLp.bottomMargin = dp(8);
+        content.addView(updateDownloadProgress, progressLp);
 
         updateDownloadDialog = new AlertDialog.Builder(this)
-                .setTitle("Downloading update")
+                .setCustomTitle(createCenteredDialogTitle("Downloading update"))
                 .setView(content)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Hide", null)
                 .create();
 
         updateDownloadDialog.setCanceledOnTouchOutside(false);
         updateDownloadDialog.show();
 
+        if (updateDownloadDialog.getButton(AlertDialog.BUTTON_NEGATIVE) != null) {
+            updateDownloadDialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+                    .setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            showCancelUpdateDownloadConfirmation();
+                        }
+                    });
+        }
+        if (updateDownloadDialog.getButton(AlertDialog.BUTTON_POSITIVE) != null) {
+            updateDownloadDialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                    .setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            updateDownloadHidden = true;
+                            Toast.makeText(MainActivity.this, "Running Background Services", Toast.LENGTH_SHORT).show();
+                            updateDownloadDialog.dismiss();
+                        }
+                    });
+        }
+
         if (updateDownloadDialog.getWindow() != null) {
             int screenWidth = getResources().getDisplayMetrics().widthPixels;
-            int width = Math.min(
-                    dp(420),
-                    Math.max(dp(280), screenWidth - dp(40))
-            );
-            updateDownloadDialog.getWindow().setLayout(
-                    width,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-            );
+            int width = Math.min(dp(420), Math.max(dp(280), screenWidth - dp(40)));
+            updateDownloadDialog.getWindow().setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
+    }
+
+    private void showCancelUpdateDownloadConfirmation() {
+        new AlertDialog.Builder(this)
+                .setTitle("Cancel download?")
+                .setMessage("The current APK download will be cancelled and the downloaded file will be removed from this device.")
+                .setNegativeButton("Keep downloading", null)
+                .setPositiveButton("Cancel download", new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface dialog, int which) {
+                        cancelUpdateDownload();
+                    }
+                })
+                .show();
+    }
+
+    private void cancelUpdateDownload() {
+        stopUpdatePolling();
+        try {
+            DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (dm != null && updateDownloadId >= 0L) {
+                dm.remove(updateDownloadId);
+            }
+        } catch (Throwable ignored) {
+        }
+        deletePendingUpdateFile();
+        clearPendingUpdateState();
+        updateInstallInProgress = false;
+        updateDownloadId = -1L;
+        if (updateDownloadDialog != null) {
+            updateDownloadDialog.dismiss();
+            updateDownloadDialog = null;
+        }
+        updateDownloadProgress = null;
+        updateDownloadStatus = null;
     }
 
     private void updateDownloadUi(
@@ -5662,251 +5686,216 @@ public class MainActivity extends Activity {
         return String.format(Locale.US, "%.2f GB", value / (1024.0 * 1024.0 * 1024.0));
     }
 
-    private void showUpdateDownloadNotification(long downloaded, long total, boolean finished) {
-        long now = System.currentTimeMillis();
-        if (!finished && now - lastUpdateNotificationAt < 250L) {
-            return;
-        }
-        lastUpdateNotificationAt = now;
-        try {
-            NotificationManager manager =
-                    (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-            if (manager == null) {
-                return;
-            }
-
-            if (Build.VERSION.SDK_INT >= 26) {
-                NotificationChannel channel = new NotificationChannel(
-                        "rena_updates",
-                        "App Updates",
-                        NotificationManager.IMPORTANCE_LOW
-                );
-                manager.createNotificationChannel(channel);
-            }
-
-            Notification.Builder builder = Build.VERSION.SDK_INT >= 26
-                    ? new Notification.Builder(this, "rena_updates")
-                    : new Notification.Builder(this);
-
-            builder.setSmallIcon(getApplicationInfo().icon)
-                    .setContentTitle("Rena update")
-                    .setOngoing(!finished)
-                    .setOnlyAlertOnce(true);
-
-            if (finished) {
-                builder.setContentText("Download complete. Preparing installation…")
-                        .setProgress(0, 0, false);
-            } else if (total > 0L) {
-                int progressValue = (int) Math.max(
-                        0L,
-                        Math.min(100L, downloaded * 100L / total)
-                );
-                builder.setContentText(
-                                formatBytes(downloaded) + " / " + formatBytes(total)
-                        )
-                        .setProgress(100, progressValue, false);
-            } else {
-                builder.setContentText(formatBytes(downloaded) + " downloaded")
-                        .setProgress(0, 0, true);
-            }
-
-            manager.notify((int) updateDownloadNotificationId, builder.build());
-        } catch (Throwable ignored) {
-        }
-    }
-
-    private void finishUpdateDownloadUi(boolean success) {
-        runOnUiThread(
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        if (updateDownloadDialog != null) {
-                            try {
-                                updateDownloadDialog.dismiss();
-                            } catch (Throwable ignored) {
-                            }
-                            updateDownloadDialog = null;
-                        }
-                        updateDownloadProgress = null;
-                        updateDownloadStatus = null;
-                    }
-                }
-        );
-    }
-
     private void downloadAndInstallApk(
             final String apkUrl,
-            final String expectedDigest
+            final String expectedDigest,
+            final String targetVersion
     ) {
         if (Build.VERSION.SDK_INT >= 26 &&
                 !getPackageManager().canRequestPackageInstalls()) {
             pendingUpdateApkUrl = apkUrl;
             pendingUpdateDigest = expectedDigest;
-            pendingUpdatePermissionCheck = true;
+            pendingUpdateVersion = targetVersion;
 
             new AlertDialog.Builder(this)
                     .setTitle(NativeConfig.updateInstallPermissionTitle())
                     .setMessage(NativeConfig.updateInstallPermissionMessage())
-                    .setNegativeButton(NativeConfig.cancelText(), null)
-                    .setPositiveButton(
-                            NativeConfig.storageSettingsButton(),
-                            new android.content.DialogInterface.OnClickListener() {
-                                @Override
-                                public void onClick(
-                                        android.content.DialogInterface dialog,
-                                        int which
-                                ) {
-                                    try {
-                                        startActivity(
-                                                new Intent(
-                                                        android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                                                        Uri.parse(
-                                                                "package:" + getPackageName()
-                                                        )
-                                                )
-                                        );
-                                    } catch (Throwable ignored) {
-                                    }
-                                }
+                    .setNegativeButton(NativeConfig.cancelText(), new android.content.DialogInterface.OnClickListener() {
+                        @Override public void onClick(android.content.DialogInterface dialog, int which) {
+                            pendingUpdateApkUrl = null;
+                            pendingUpdateDigest = null;
+                            pendingUpdateVersion = null;
+                        }
+                    })
+                    .setPositiveButton(NativeConfig.storageSettingsButton(), new android.content.DialogInterface.OnClickListener() {
+                        @Override public void onClick(android.content.DialogInterface dialog, int which) {
+                            try {
+                                startActivity(new Intent(
+                                        android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                        Uri.parse("package:" + getPackageName())
+                                ));
+                            } catch (Throwable ignored) {
                             }
-                    )
+                        }
+                    })
                     .show();
             return;
         }
 
+        startManagedApkDownload(apkUrl, expectedDigest, targetVersion);
+    }
+
+    private void startManagedApkDownload(final String apkUrl, final String expectedDigest, final String targetVersion) {
         final File updateRoot = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
         if (updateRoot == null) {
-            Toast.makeText(
-                    this,
-                    NativeConfig.updateDownloadFailedText(),
-                    Toast.LENGTH_LONG
-            ).show();
+            Toast.makeText(this, NativeConfig.updateDownloadFailedText(), Toast.LENGTH_LONG).show();
             return;
         }
 
-        showUpdateDownloadDialog();
-        showUpdateDownloadNotification(0L, 0L, false);
+        stopUpdatePolling();
+        deletePendingUpdateFile();
 
-        AsyncTask.execute(
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        downloadAndInstallApkInternal(apkUrl, expectedDigest, updateRoot);
-                    }
-                }
-        );
+        final File updates = new File(updateRoot, "Rena/Updates");
+        if (!updates.exists() && !updates.mkdirs()) {
+            Toast.makeText(this, NativeConfig.updateDownloadFailedText(), Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        final File output = new File(updates, "Rena-W4B-update.apk");
+        try {
+            DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (dm == null) throw new IllegalStateException("DownloadManager unavailable");
+
+            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(apkUrl));
+            request.setTitle("Rena update");
+            request.setDescription("Downloading Rena " + stripVersionPrefix(targetVersion));
+            request.setMimeType("application/vnd.android.package-archive");
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            request.setAllowedOverMetered(true);
+            request.setAllowedOverRoaming(false);
+            request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "Rena/Updates/Rena-W4B-update.apk");
+
+            updateDownloadId = dm.enqueue(request);
+            updateDownloadHidden = false;
+            updateInstallInProgress = true;
+            RenaSettingsStore.putLong(this, "update_download_id", updateDownloadId);
+            RenaSettingsStore.putString(this, "update_expected_digest", expectedDigest);
+            RenaSettingsStore.putString(this, PREF_UPDATE_PENDING_PATH, output.getAbsolutePath());
+            RenaSettingsStore.putString(this, PREF_UPDATE_PENDING_VERSION, targetVersion);
+            updatePollRunnable = new Runnable() {
+                @Override public void run() { pollUpdateDownload(apkUrl, expectedDigest, targetVersion, output); }
+            };
+            showUpdateDownloadDialog();
+            updateHandler.post(updatePollRunnable);
+        } catch (Throwable ignored) {
+            updateInstallInProgress = false;
+            deletePendingUpdateFile();
+            Toast.makeText(this, NativeConfig.updateDownloadFailedText(), Toast.LENGTH_LONG).show();
+        }
     }
 
-    private void downloadAndInstallApkInternal(
-            final String apkUrl,
-            final String expectedDigest,
-            final File updateRoot
-    ) {
-        File output = null;
-        HttpURLConnection connection = null;
-
+    private void pollUpdateDownload(final String apkUrl, final String expectedDigest, final String targetVersion, final File output) {
+        if (!isUiAlive()) return;
+        DownloadManager dm;
+        DownloadManager.Query query;
+        android.database.Cursor cursor = null;
         try {
-            updateInstallInProgress = true;
-
-            File updates = new File(updateRoot, "Rena/Updates");
-            if (!updates.exists() && !updates.mkdirs()) {
-                throw new java.io.IOException(
-                        "Unable to create update directory"
-                );
+            dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (dm == null || updateDownloadId < 0L) return;
+            query = new DownloadManager.Query().setFilterById(updateDownloadId);
+            cursor = dm.query(query);
+            if (cursor == null || !cursor.moveToFirst()) {
+                return;
             }
-
-            output = new File(
-                    updates,
-                    "Rena-W4B-update.apk"
-            );
-
-            URL url = new URL(apkUrl);
-            connection = (HttpURLConnection) url.openConnection();
-            connection.setConnectTimeout(10000);
-            connection.setReadTimeout(30000);
-            connection.setRequestProperty(
-                    "User-Agent",
-                    NativeConfig.developerName()
-            );
-
-            int responseCode = connection.getResponseCode();
-            if (responseCode < 200 || responseCode >= 300) {
-                throw new java.io.IOException(
-                        "APK download failed"
-                );
+            int status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+            long downloaded = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
+            long total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
+            updateDownloadUi(downloaded, total);
+            if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                stopUpdatePolling();
+                verifyAndLaunchManagedApk(output, expectedDigest, targetVersion);
+                return;
             }
-
-            long totalBytes = connection.getContentLengthLong();
-            InputStream input = new BufferedInputStream(
-                    connection.getInputStream()
-            );
-            FileOutputStream outputStream = new FileOutputStream(output);
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-
-            byte[] buffer = new byte[8192];
-            long downloadedBytes = 0L;
-            int read;
-            while ((read = input.read(buffer)) != -1) {
-                digest.update(buffer, 0, read);
-                outputStream.write(buffer, 0, read);
-                downloadedBytes += read;
-                updateDownloadUi(downloadedBytes, totalBytes);
-                showUpdateDownloadNotification(downloadedBytes, totalBytes, false);
+            if (status == DownloadManager.STATUS_FAILED) {
+                stopUpdatePolling();
+                handleManagedDownloadFailure(output);
+                return;
             }
-
-            outputStream.flush();
-            outputStream.close();
-            input.close();
-
-            String actual = toHex(digest.digest());
-            if (!expectedDigest.equalsIgnoreCase(actual)) {
-                throw new SecurityException("APK digest mismatch");
-            }
-
-            if (!verifyApkSigner(output)) {
-                throw new SecurityException("APK signer mismatch");
-            }
-
-            final File installerFile = output;
-            showUpdateDownloadNotification(1L, 1L, true);
-            finishUpdateDownloadUi(true);
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    if (!isUiAlive()) {
-                        updateInstallInProgress = false;
-                        return;
-                    }
-                    launchApkInstaller(installerFile);
-                }
-            });
         } catch (Throwable ignored) {
-            if (output != null) {
-                try {
-                    output.delete();
-                } catch (Throwable ignoredDelete) {
-                }
-            }
-            updateInstallInProgress = false;
-            finishUpdateDownloadUi(false);
-
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    if (!isUiAlive()) {
-                        return;
-                    }
-                    Toast.makeText(
-                            MainActivity.this,
-                            NativeConfig.updateDownloadFailedText(),
-                            Toast.LENGTH_LONG
-                    ).show();
-                }
-            });
         } finally {
-            if (connection != null) {
-                connection.disconnect();
+            if (cursor != null) cursor.close();
+        }
+        if (updatePollRunnable != null) updateHandler.postDelayed(updatePollRunnable, 450L);
+    }
+
+    private void verifyAndLaunchManagedApk(final File apk, final String expectedDigest, final String targetVersion) {
+        AsyncTask.execute(new Runnable() {
+            @Override public void run() {
+                boolean valid = false;
+                try {
+                    MessageDigest md = MessageDigest.getInstance("SHA-256");
+                    InputStream in = new BufferedInputStream(new java.io.FileInputStream(apk));
+                    byte[] buffer = new byte[32 * 1024];
+                    int read;
+                    while ((read = in.read(buffer)) != -1) md.update(buffer, 0, read);
+                    in.close();
+                    valid = expectedDigest != null && expectedDigest.equalsIgnoreCase(toHex(md.digest())) && verifyApkSigner(apk);
+                } catch (Throwable ignored) {
+                }
+                final boolean result = valid;
+                runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        if (!result) {
+                            handleManagedDownloadFailure(apk);
+                            return;
+                        }
+                        pendingInstalledCleanupPath = apk.getAbsolutePath();
+                        pendingInstalledCleanupVersion = targetVersion;
+                        RenaSettingsStore.putString(MainActivity.this, PREF_UPDATE_PENDING_PATH, pendingInstalledCleanupPath);
+                        RenaSettingsStore.putString(MainActivity.this, PREF_UPDATE_PENDING_VERSION, targetVersion);
+                        RenaSettingsStore.putBoolean(MainActivity.this, PREF_UPDATE_READY, true);
+                        if (updateDownloadDialog != null) { updateDownloadDialog.dismiss(); updateDownloadDialog = null; }
+                        updateDownloadProgress = null;
+                        updateDownloadStatus = null;
+                        clearDownloadManagerStateOnly();
+                        launchApkInstaller(apk);
+                    }
+                });
             }
+        });
+    }
+
+    private void handleManagedDownloadFailure(File output) {
+        updateInstallInProgress = false;
+        if (output != null) { try { output.delete(); } catch (Throwable ignored) {} }
+        clearPendingUpdateState();
+        if (updateDownloadDialog != null) { updateDownloadDialog.dismiss(); updateDownloadDialog = null; }
+        updateDownloadProgress = null;
+        updateDownloadStatus = null;
+        Toast.makeText(this, NativeConfig.updateDownloadFailedText(), Toast.LENGTH_LONG).show();
+    }
+
+    private void stopUpdatePolling() {
+        if (updatePollRunnable != null) updateHandler.removeCallbacks(updatePollRunnable);
+        updatePollRunnable = null;
+    }
+
+    private void clearDownloadManagerStateOnly() {
+        RenaSettingsStore.remove(this, "update_download_id");
+        RenaSettingsStore.remove(this, "update_expected_digest");
+        updateDownloadId = -1L;
+        updateInstallInProgress = false;
+    }
+
+    private void clearPendingUpdateState() {
+        clearDownloadManagerStateOnly();
+        RenaSettingsStore.remove(this, PREF_UPDATE_PENDING_PATH);
+        RenaSettingsStore.remove(this, PREF_UPDATE_PENDING_VERSION);
+        RenaSettingsStore.remove(this, PREF_UPDATE_READY);
+        pendingInstalledCleanupPath = null;
+        pendingInstalledCleanupVersion = null;
+    }
+
+    private void deletePendingUpdateFile() {
+        String path = RenaSettingsStore.getString(this, PREF_UPDATE_PENDING_PATH, "");
+        if (TextUtils.isEmpty(path)) path = pendingInstalledCleanupPath;
+        if (!TextUtils.isEmpty(path)) {
+            try { new File(path).delete(); } catch (Throwable ignored) {}
+        }
+    }
+
+    private void loadPendingUpdateCleanupState() {
+        pendingInstalledCleanupPath = RenaSettingsStore.getString(this, PREF_UPDATE_PENDING_PATH, "");
+        pendingInstalledCleanupVersion = RenaSettingsStore.getString(this, PREF_UPDATE_PENDING_VERSION, "");
+        updateDownloadId = RenaSettingsStore.getLong(this, "update_download_id", -1L);
+    }
+
+    private void cleanupInstalledUpdateArtifact() {
+        if (TextUtils.isEmpty(pendingInstalledCleanupPath) || TextUtils.isEmpty(pendingInstalledCleanupVersion)) return;
+        String installed = getInstalledVersionName();
+        if (compareVersions(installed, pendingInstalledCleanupVersion) >= 0) {
+            try { new File(pendingInstalledCleanupPath).delete(); } catch (Throwable ignored) {}
+            clearPendingUpdateState();
         }
     }
 
@@ -5971,6 +5960,7 @@ public class MainActivity extends Activity {
             );
 
         } catch (Throwable ignored) {
+            RenaSettingsStore.putBoolean(this, PREF_UPDATE_READY, true);
             Toast.makeText(
                     this,
                     NativeConfig.updateDownloadFailedText(),
@@ -6047,7 +6037,12 @@ public class MainActivity extends Activity {
 
         ImageView icon = new ImageView(this);
         icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        icon.setPadding(dp(6), dp(6), dp(6), dp(6));
+        icon.setPadding(
+                "check_updates".equals(assetName) ? dp(10) : dp(6),
+                "check_updates".equals(assetName) ? dp(10) : dp(6),
+                "check_updates".equals(assetName) ? dp(10) : dp(6),
+                "check_updates".equals(assetName) ? dp(10) : dp(6)
+        );
 
         int iconResourceId;
         if ("check_updates".equals(assetName)) {
@@ -6706,6 +6701,7 @@ public class MainActivity extends Activity {
             boolean showToast
     ) {
         zoomEnabled = enabled;
+        RenaSettingsStore.putBoolean(this, "zoom_enabled", enabled);
 
         if (showToast) {
             showToggleToastOnce(
@@ -6766,7 +6762,7 @@ public class MainActivity extends Activity {
                 "else{out.push(parts[i]);}}" +
                 "if(!hasWidth){out.push('width=device-width');}" +
                 "if(!hasInitial){out.push('initial-scale=1');}" +
-                "out.push('minimum-scale=0.25');out.push('maximum-scale=10');out.push('user-scalable=yes');" +
+                "out.push('minimum-scale=0.90');out.push('maximum-scale=2.75');out.push('user-scalable=yes');" +
                 "m.setAttribute('content',out.join(', '));" +
                 "})();";
 
@@ -6807,18 +6803,12 @@ public class MainActivity extends Activity {
         }
 
         try {
-            final int maxSteps = 24;
-
-            for (int i = 0; i < maxSteps; i++) {
-                float current = webView.getScale();
-
-                if (current <= 0f ||
-                        current <= baselineScale + 0.02f) {
-                    break;
-                }
-
-                if (!webView.zoomOut()) {
-                    break;
+            float current = webView.getScale();
+            if (current > 0f && baselineScale > 0f) {
+                float factor = baselineScale / current;
+                if (factor > 0.01f && factor < 100f &&
+                        Math.abs(current - baselineScale) > 0.02f) {
+                    webView.zoomBy(factor);
                 }
             }
         } catch (Throwable ignored) {
@@ -6983,11 +6973,27 @@ public class MainActivity extends Activity {
         manager.createNotificationChannel(silent);
     }
 
+    private void cancelAllWebNotifications() {
+        try {
+            NotificationManager manager =
+                    (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (manager == null) return;
+            for (int tabId = 1; tabId <= 10; tabId++) {
+                manager.cancel(("rena_notification_" + tabId).hashCode());
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void postWebNotification(
             String chat,
             String body,
             String key
     ) {
+        if (hideNotifications) {
+            return;
+        }
+
         if (Build.VERSION.SDK_INT >= 33 &&
                 checkSelfPermission(
                         Manifest.permission.POST_NOTIFICATIONS
@@ -7982,10 +7988,13 @@ public class MainActivity extends Activity {
 
     private boolean integrityGate() {
         try {
-            return RenaApplication.isApplicationIntegrityValid(this) &&
-                    NativeConfig.isNativeAvailable() &&
-                    NativeConfig.verifyIntegrity(this) &&
-                    NativeConfig.verifyRuntimeBinding(this);
+            /*
+             * Takane.b(...) is the authoritative integrity gate and is
+             * implemented by ridhoae303.cpp inside librena.so.
+             * Keep the Java side from duplicating stricter runtime checks
+             * that can produce false positives even when the APK signer is valid.
+             */
+            return NativeConfig.isNativeAvailable() && Takane.b(this);
         } catch (Throwable ignored) {
             return false;
         }
@@ -8029,28 +8038,6 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
 
-        if (!activityDestroyed) {
-            getWindow().getDecorView().postDelayed(
-                    new Runnable() {
-                        @Override
-                        public void run() {
-                            long now = android.os.SystemClock.elapsedRealtime();
-                            if (!isUiAlive() ||
-                                    updateCheckRunning ||
-                                    updateInstallInProgress ||
-                                    pendingUpdateApkUrl != null ||
-                                    now - lastAutomaticUpdateCheckAt < 60000L ||
-                                    !hasInternetConnection()) {
-                                return;
-                            }
-                            lastAutomaticUpdateCheckAt = now;
-                            startAutomaticUpdateCheck();
-                        }
-                    },
-                    900L
-            );
-        }
-
         boolean currentInternet = hasInternetConnection();
         if (internetAvailable && !currentInternet && webView != null) {
             showRuntimeOfflineToast();
@@ -8058,6 +8045,8 @@ public class MainActivity extends Activity {
         internetAvailable = currentInternet;
 
         applyImmersiveFullscreen();
+        cleanupInstalledUpdateArtifact();
+        resumeManagedDownloadIfNeeded();
 
         resumeRetainedTabViews();
 
@@ -8105,6 +8094,20 @@ public class MainActivity extends Activity {
             // immediately reappear or chain into another settings screen.
         }
 
+        showPendingAutomaticUpdateDialogIfReady();
+
+        if (startupFlowFinished && !updateCheckRunning && !updateInstallInProgress &&
+                hasInternetConnection()) {
+            long last = RenaSettingsStore.getLong(this, PREF_UPDATE_LAST_AUTO_CHECK, 0L);
+            long now = System.currentTimeMillis();
+            if (last == 0L || now - last >= AUTOMATIC_UPDATE_CHECK_INTERVAL_MS) {
+                RenaSettingsStore.putLong(this, PREF_UPDATE_LAST_AUTO_CHECK, now);
+                startAutomaticUpdateCheck();
+            }
+        }
+
+        resumeReadyUpdateInstall();
+
         if (pendingStartupPermissionAfterSettings >= 0) {
             int index = pendingStartupPermissionAfterSettings;
             pendingStartupPermissionAfterSettings = -1;
@@ -8120,13 +8123,23 @@ public class MainActivity extends Activity {
         }
 
         if (pendingUpdateApkUrl != null) {
-            String apkUrl = pendingUpdateApkUrl;
-            String digest = pendingUpdateDigest;
+            boolean canInstallPackages =
+                    Build.VERSION.SDK_INT < 26 ||
+                    getPackageManager().canRequestPackageInstalls();
 
-            pendingUpdateApkUrl = null;
-            pendingUpdateDigest = null;
+            if (canInstallPackages) {
+                String apkUrl = pendingUpdateApkUrl;
+                String digest = pendingUpdateDigest;
+                String targetVersion = pendingUpdateVersion;
 
-            downloadAndInstallApk(apkUrl, digest);
+                pendingUpdateApkUrl = null;
+                pendingUpdateDigest = null;
+                pendingUpdateVersion = null;
+
+                if (!TextUtils.isEmpty(apkUrl) && !TextUtils.isEmpty(digest) && !TextUtils.isEmpty(targetVersion)) {
+                    startManagedApkDownload(apkUrl, digest, targetVersion);
+                }
+            }
         }
 
         if (pendingWebDownloadUrl != null &&
@@ -8180,6 +8193,33 @@ public class MainActivity extends Activity {
         super.onNewIntent(intent);
         setIntent(intent);
         handleNotificationIntent(intent);
+    }
+
+    private void resumeReadyUpdateInstall() {
+        if (!RenaSettingsStore.getBoolean(this, PREF_UPDATE_READY, false)) return;
+        String path = RenaSettingsStore.getString(this, PREF_UPDATE_PENDING_PATH, "");
+        String version = RenaSettingsStore.getString(this, PREF_UPDATE_PENDING_VERSION, "");
+        if (TextUtils.isEmpty(path) || TextUtils.isEmpty(version)) return;
+        File apk = new File(path);
+        if (!apk.isFile()) return;
+        if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) return;
+        RenaSettingsStore.putBoolean(this, PREF_UPDATE_READY, false);
+        launchApkInstaller(apk);
+    }
+
+    private void resumeManagedDownloadIfNeeded() {
+        if (updateDownloadId < 0L || updatePollRunnable != null) return;
+        String path = RenaSettingsStore.getString(this, PREF_UPDATE_PENDING_PATH, "");
+        final String version = RenaSettingsStore.getString(this, PREF_UPDATE_PENDING_VERSION, "");
+        final String digest = RenaSettingsStore.getString(this, "update_expected_digest", "");
+        if (TextUtils.isEmpty(path) || TextUtils.isEmpty(version) || TextUtils.isEmpty(digest)) return;
+        final File apk = new File(path);
+        if (!apk.getParentFile().exists() && !apk.getParentFile().mkdirs()) return;
+        updateInstallInProgress = true;
+        updatePollRunnable = new Runnable() {
+            @Override public void run() { pollUpdateDownload("", digest, version, apk); }
+        };
+        updateHandler.post(updatePollRunnable);
     }
 
     private void handleNotificationIntent(Intent intent) {
@@ -8407,6 +8447,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         activityDestroyed = true;
+        stopUpdatePolling();
         if (renaImageTask != null) {
             try {
                 renaImageTask.cancel(true);
@@ -8737,6 +8778,7 @@ public class MainActivity extends Activity {
                             permissionFlowDeferred = false;
                             startPermissionFlow();
                         }
+                        showPendingAutomaticUpdateDialogIfReady();
                     }
                 }
         );
@@ -9655,9 +9697,11 @@ public class MainActivity extends Activity {
                 minScale = 1f;
             }
 
+            // Keep the existing zoom mechanics untouched; only raise the
+            // ceiling to a safe 10x relative to the fitted baseline.
             maxScale = Math.max(
-                    3f,
-                    minScale * 5f
+                    1f,
+                    minScale * 10f
             );
 
             currentScale = minScale;
