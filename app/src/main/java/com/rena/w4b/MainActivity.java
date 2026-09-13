@@ -6733,8 +6733,14 @@ public class MainActivity extends Activity {
             }
             applyEnhancedZoomViewport();
         } else {
-            restoreOriginalViewport();
-            resetZoomToBaseline();
+            restoreOriginalViewport(
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            resetZoomToBaseline();
+                        }
+                    }
+            );
         }
     }
 
@@ -6762,7 +6768,7 @@ public class MainActivity extends Activity {
                 "else{out.push(parts[i]);}}" +
                 "if(!hasWidth){out.push('width=device-width');}" +
                 "if(!hasInitial){out.push('initial-scale=1');}" +
-                "out.push('minimum-scale=0.90');out.push('maximum-scale=2.75');out.push('user-scalable=yes');" +
+                "out.push('minimum-scale=0.50');out.push('maximum-scale=5');out.push('user-scalable=yes');" +
                 "m.setAttribute('content',out.join(', '));" +
                 "})();";
 
@@ -6775,8 +6781,11 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void restoreOriginalViewport() {
+    private void restoreOriginalViewport(final Runnable afterRestore) {
         if (webView == null) {
+            if (afterRestore != null) {
+                afterRestore.run();
+            }
             return;
         }
 
@@ -6789,11 +6798,20 @@ public class MainActivity extends Activity {
         try {
             webView.evaluateJavascript(
                     script,
-                    null
+                    new ValueCallback<String>() {
+                        @Override
+                        public void onReceiveValue(String value) {
+                            if (afterRestore != null && webView != null) {
+                                webView.post(afterRestore);
+                            }
+                        }
+                    }
             );
         } catch (Throwable ignored) {
+            if (afterRestore != null) {
+                afterRestore.run();
+            }
         }
-
     }
 
     @SuppressWarnings("deprecation")

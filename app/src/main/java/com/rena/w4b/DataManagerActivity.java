@@ -28,6 +28,8 @@ import java.util.concurrent.Executors;
 public class DataManagerActivity extends Activity {
     private boolean closing;
     private final ExecutorService cleanupExecutor = Executors.newSingleThreadExecutor();
+    private TextView cacheSizeView;
+    private TextView dataSizeView;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -139,6 +141,16 @@ public class DataManagerActivity extends Activity {
                 header,
                 exact(dp(58))
         );
+
+        LinearLayout storageCard = buildStorageCard();
+        LinearLayout.LayoutParams storageCardLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(88)
+        );
+        storageCardLp.topMargin = dp(8);
+        storageCardLp.bottomMargin = dp(2);
+        root.addView(storageCard, storageCardLp);
+        refreshStorageSizes();
 
         TextView cookies =
                 action(NativeConfig.dataCookiesText());
@@ -577,6 +589,186 @@ public class DataManagerActivity extends Activity {
         } catch (Throwable ignored) {
         }
         return android.graphics.Typeface.create("sans-serif", style);
+    }
+
+    private LinearLayout buildStorageCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(16), dp(10), dp(16), dp(10));
+        card.setBackground(
+                round(
+                        Color.argb(28, 255, 255, 255),
+                        dp(18)
+                )
+        );
+
+        LinearLayout cacheBox = buildStorageItem(
+                "Cache",
+                true
+        );
+        LinearLayout dataBox = buildStorageItem(
+                "Data",
+                false
+        );
+
+        LinearLayout.LayoutParams itemLp =
+                new LinearLayout.LayoutParams(
+                        0,
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        1f
+                );
+        cacheBox.setLayoutParams(itemLp);
+
+        dataBox.setLayoutParams(
+                new LinearLayout.LayoutParams(
+                        0,
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        1f
+                )
+        );
+
+        card.addView(cacheBox);
+        card.addView(dataBox);
+        return card;
+    }
+
+    private LinearLayout buildStorageItem(
+            String title,
+            boolean cache
+    ) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER_VERTICAL);
+        box.setPadding(0, 0, dp(8), 0);
+
+        TextView label = text(title, 12);
+        label.setTextColor(Color.argb(160, 255, 255, 255));
+
+        TextView value = text("Calculating...", 17);
+        value.setTypeface(
+                loadAppFont(
+                        android.graphics.Typeface.BOLD
+                )
+        );
+        value.setSingleLine(true);
+
+        if (cache) {
+            cacheSizeView = value;
+        } else {
+            dataSizeView = value;
+        }
+
+        box.addView(label);
+        box.addView(value);
+        return box;
+    }
+
+    private void refreshStorageSizes() {
+        final File dataDirectory;
+        final File cacheDirectory;
+        final File codeCacheDirectory;
+
+        try {
+            dataDirectory = getApplicationInfo().dataDir != null
+                    ? new File(getApplicationInfo().dataDir)
+                    : null;
+            cacheDirectory = getCacheDir();
+            codeCacheDirectory = android.os.Build.VERSION.SDK_INT >= 21
+                    ? getCodeCacheDir()
+                    : null;
+        } catch (Throwable ignored) {
+            return;
+        }
+
+        cleanupExecutor.execute(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        long cacheBytes = directorySize(cacheDirectory);
+                        long dataBytes = directorySize(dataDirectory);
+
+                        dataBytes -= cacheBytes;
+                        if (codeCacheDirectory != null) {
+                            dataBytes -= directorySize(codeCacheDirectory);
+                        }
+                        dataBytes = Math.max(0L, dataBytes);
+
+                        final long finalCacheBytes = cacheBytes;
+                        final long finalDataBytes = dataBytes;
+
+                        runOnUiThread(
+                                new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        if (isFinishing() || isDestroyed()) {
+                                            return;
+                                        }
+
+                                        if (cacheSizeView != null) {
+                                            cacheSizeView.setText(
+                                                    formatBytes(finalCacheBytes)
+                                            );
+                                        }
+
+                                        if (dataSizeView != null) {
+                                            dataSizeView.setText(
+                                                    formatBytes(finalDataBytes)
+                                            );
+                                        }
+                                    }
+                                }
+                        );
+                    }
+                }
+        );
+    }
+
+    private long directorySize(File file) {
+        if (file == null || !file.exists()) {
+            return 0L;
+        }
+
+        if (file.isFile()) {
+            return Math.max(0L, file.length());
+        }
+
+        long total = 0L;
+        File[] children = file.listFiles();
+        if (children == null) {
+            return 0L;
+        }
+
+        for (File child : children) {
+            try {
+                total += directorySize(child);
+                if (total < 0L) {
+                    return Long.MAX_VALUE;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+
+        return total;
+    }
+
+    private String formatBytes(long bytes) {
+        if (bytes < 1024L) {
+            return bytes + " B";
+        }
+
+        double kb = bytes / 1024.0;
+        if (kb < 1024.0) {
+            return String.format(java.util.Locale.US, "%.1f KB", kb);
+        }
+
+        double mb = kb / 1024.0;
+        if (mb < 1024.0) {
+            return String.format(java.util.Locale.US, "%.1f MB", mb);
+        }
+
+        double gb = mb / 1024.0;
+        return String.format(java.util.Locale.US, "%.2f GB", gb);
     }
 
     private TextView action(String value) {
