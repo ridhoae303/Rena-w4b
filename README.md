@@ -37,7 +37,7 @@ The project also has a native C++ layer for protected config strings and app int
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="https://github.com/user-attachments/assets/59b21cbf-39ed-41ca-aa2d-f2bd02830797" alt="preview2" width="100%" />
+      <img src="https://github.com/user-attachments/assets/80192204-6816-444c-abeb-2203ee30b33f" alt="preview2" width="100%" />
     </td>
     <td align="center" width="50%">
       <img src="https://github.com/user-attachments/assets/eeb57548-9490-433a-bf1c-a1f4e5800d21" alt="preview3" width="100%" />
