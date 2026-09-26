@@ -382,8 +382,7 @@ public class DataManagerActivity extends Activity {
                     WebViewFeature.MULTI_PROFILE
             )) {
                 Profile profile =
-                        ProfileStore
-                                .getInstance()
+                        getProfileStoreInstance()
                                 .getOrCreateProfile(
                                         profileId
                                 );
@@ -463,6 +462,16 @@ public class DataManagerActivity extends Activity {
                     profileId
             );
         }
+    }
+
+    private ProfileStore getProfileStoreInstance() throws Exception {
+        java.lang.reflect.Method method =
+                ProfileStore.class.getMethod("getInstance");
+        Object value = method.invoke(null);
+        if (value instanceof ProfileStore) {
+            return (ProfileStore) value;
+        }
+        throw new IllegalStateException("ProfileStore.getInstance() returned an invalid value");
     }
 
     private void finishDataClear(

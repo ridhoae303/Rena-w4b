@@ -114,7 +114,6 @@ public final class RenaSettingsStore {
         );
     }
 
-
     public static String getString(Context context, String key, String fallback) {
         String value = get(context, key);
         return value == null ? fallback : value;

@@ -24,8 +24,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import android.graphics.drawable.GradientDrawable;
 
-
-
 public class LockScreenActivity extends Activity {
     private EditText pinInput;
     private TextView unlockButton;
@@ -492,7 +490,7 @@ public class LockScreenActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        // App Lock must not be bypassed with Back.
+
     }
 
     private TextView text(String value, float size, int color) {

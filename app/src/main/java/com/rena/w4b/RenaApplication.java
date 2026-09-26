@@ -3,12 +3,6 @@ package com.rena.w4b;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 
-/**
- * Rena W4B's concrete Application implementation.
- *
- * The integrity checks require this exact class to be declared by the
- * AndroidManifest and to extend android.app.Application directly.
- */
 public final class RenaApplication extends android.app.Application {
 
     @Override

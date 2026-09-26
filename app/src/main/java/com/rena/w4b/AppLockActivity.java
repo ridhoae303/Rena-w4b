@@ -18,8 +18,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.graphics.drawable.GradientDrawable;
 
-
-
 public class AppLockActivity extends Activity {
     private Switch lockSwitch;
     private Switch biometricSwitch;
@@ -702,8 +700,6 @@ public class AppLockActivity extends Activity {
             return;
         }
 
-        // Keep this as a simple single-choice dialog: six practical values fit well
-        // on a phone and it avoids another nested control inside App Lock.
         final String[] labels = new String[]{
                 NativeConfig.timeoutImmediate(),
                 NativeConfig.timeoutOneMinute(),

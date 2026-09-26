@@ -228,7 +228,7 @@ public class TeamDeveloperActivity extends Activity {
                 dp(8),
                 0
         );
-        // Keep the loading state compact while the live GitHub request is running.
+
         contributorsState.setVisibility(View.VISIBLE);
         contributorsState.setGravity(Gravity.CENTER_VERTICAL);
 
@@ -496,8 +496,7 @@ public class TeamDeveloperActivity extends Activity {
         github.setScaleType(
                 ImageView.ScaleType.CENTER_INSIDE
         );
-        // Preserve the supplied GitHub icon colors; tinting it white makes
-        // the black mark disappear into the white circle.
+
         final String profileUrl =
                 NativeConfig.githubProfileUrl(username);
 

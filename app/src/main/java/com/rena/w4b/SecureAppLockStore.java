@@ -2,22 +2,11 @@ package com.rena.w4b;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 
-/**
- * App Lock credential store.
- *
- * The stored credential contains only the PIN verifier (PBKDF2 hash), random
- * salt, enabled state, timeout, and biometric preference. The PIN itself is
- * never stored. No Android Keystore or AES-GCM dependency is used here.
- * PIN policy is enforced by the activities only as exactly four decimal digits;
- * no weak/common PIN blacklist or strength check is applied.
- */
 public final class SecureAppLockStore {
     private static final String ACTIVE_PREFS = "rena_app_lock_secure_v4";
     private static final String ACTIVE_VALUE = "credential";

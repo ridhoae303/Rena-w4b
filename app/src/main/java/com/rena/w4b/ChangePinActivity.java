@@ -19,7 +19,6 @@ import android.widget.Toast;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Small, self-contained PIN replacement screen. It never touches WebView state. */
 public class ChangePinActivity extends Activity {
     private EditText currentPin;
     private EditText newPin;

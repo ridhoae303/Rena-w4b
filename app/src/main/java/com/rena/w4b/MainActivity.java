@@ -1,8 +1,7 @@
 package com.rena.w4b;
 
-
-
-import com.ridhoae303.expert.Takane;import android.Manifest;
+import com.ridhoae303.expert.Takane;
+import android.Manifest;
 import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -195,6 +194,11 @@ public class MainActivity extends Activity {
     private static final String PREF_UPDATE_PENDING_PATH = "update_pending_path";
     private static final String PREF_UPDATE_PENDING_VERSION = "update_pending_version";
     private static final String PREF_UPDATE_READY = "update_ready";
+    private static final String PREF_UPDATE_CACHED_TAG = "update_cached_tag";
+    private static final String PREF_UPDATE_CACHED_NAME = "update_cached_name";
+    private static final String PREF_UPDATE_CACHED_NOTES = "update_cached_notes";
+    private static final String PREF_UPDATE_CACHED_APK_URL = "update_cached_apk_url";
+    private static final String PREF_UPDATE_CACHED_DIGEST = "update_cached_digest";
     private AlertDialog updateDownloadDialog;
     private ProgressBar updateDownloadProgress;
     private TextView updateDownloadStatus;
@@ -258,7 +262,6 @@ public class MainActivity extends Activity {
     private static final String REMOTE_INPUT_REPLY =
             "remote_reply";
 
-
     private String pendingWebDownloadUrl;
     private String pendingWebDownloadUserAgent;
     private String pendingWebDownloadContentDisposition;
@@ -281,7 +284,6 @@ public class MainActivity extends Activity {
         String url;
         String digest;
     }
-
 
     private int detectedGlesMajor = 2;
 
@@ -347,7 +349,6 @@ public class MainActivity extends Activity {
 
         applyImmersiveFullscreen();
 
-
         try {
             multiProfileSupported =
                     WebViewFeature.isFeatureSupported(
@@ -386,9 +387,7 @@ public class MainActivity extends Activity {
         cleanupInstalledUpdateArtifact();
 
         if (!NativeConfig.isNativeAvailable() || !integrityGate()) {
-            // Signature/tamper enforcement is owned by the native Takane gate.
-            // Do not show a Java-side integrity dialog for secondary checks;
-            // those checks can legitimately be unavailable on some Android builds.
+
             closeAppBySystem();
             return;
         }
@@ -441,9 +440,6 @@ public class MainActivity extends Activity {
                 140L
         );
 
-        // Check for updates during startup, but never compete with permission
-        // or special startup dialogs. The result is queued until those dialogs
-        // have finished.
         root.postDelayed(
                 new Runnable() {
                     @Override
@@ -464,13 +460,6 @@ public class MainActivity extends Activity {
         );
     }
 
-    /*
-     * Request everything that can reasonably be requested at startup.
-     *
-     * VIBRATE does not need a runtime dialog.
-     * READ_EXTERNAL_STORAGE is requested only on Android 9 and below.
-     * POST_NOTIFICATIONS exists as a runtime permission from Android 13.
-     */
     private boolean wasSpecialPromptShown(String key) {
         return RenaSettingsStore.getBoolean(this, key, false);
     }
@@ -500,11 +489,6 @@ public class MainActivity extends Activity {
     }
 
     private void continueSpecialStartupFlow() {
-        /*
-         * These special settings are optional recommendations. The actual
-         * state is checked every time, but a declined prompt is never forced
-         * again on every application launch.
-         */
         if (Build.VERSION.SDK_INT >= 30
                 && !hasAllFilesAccess()
                 && !wasSpecialPromptShown(SPECIAL_PROMPT_STORAGE)) {
@@ -1063,11 +1047,6 @@ public class MainActivity extends Activity {
             );
         }
 
-        /*
-         * Small loading layer.
-         * This avoids the ugly "pure black flash" while the WebView surface
-         * is being recreated or while WhatsApp Web is loading again.
-         */
         FrameLayout loading = new FrameLayout(this);
         loading.setBackgroundColor(Color.rgb(17, 27, 33));
 
@@ -1317,8 +1296,7 @@ public class MainActivity extends Activity {
                 webProfile = null;
                 if (multiProfileSupported) {
                     webProfile =
-                            ProfileStore
-                                    .getInstance()
+                            getProfileStoreInstance()
                                     .getOrCreateProfile(
                                             currentTab.profileId
                                     );
@@ -1359,12 +1337,6 @@ public class MainActivity extends Activity {
         boolean profileReady =
                 currentTab.id == 1;
 
-        /*
-         * androidx.webkit 1.9.0 provides true per-WebView profiles.
-         * Profile data includes cookies, local storage, service workers and
-         * the profile's WebStorage. The profile must be attached before any
-         * other WebView configuration is performed.
-         */
         if (multiProfileSupported) {
             try {
                 WebViewCompat.setProfile(
@@ -1373,7 +1345,7 @@ public class MainActivity extends Activity {
                 );
 
                 ProfileStore store =
-                        ProfileStore.getInstance();
+                        getProfileStoreInstance();
 
                 webProfile =
                         store.getOrCreateProfile(
@@ -1456,9 +1428,6 @@ public class MainActivity extends Activity {
                         restored != null &&
                         restored.getSize() > 0;
 
-                // Restored WebView history may contain an older login or
-                // redirect chain. The first stable page becomes the new
-                // Back-navigation floor for this app launch.
                 historyFloorApplied = false;
             } catch (Throwable ignoredRestore) {
                 webStateRestored = false;
@@ -1499,9 +1468,7 @@ public class MainActivity extends Activity {
             detectedGlesMajor = 2;
         }
 
-        // Keep WebView on its normal provider-managed rendering path.
     }
-
 
     private void updateDrawerBounds(int rootWidth) {
         if (root == null || drawer == null || rootWidth <= 0) {
@@ -1524,7 +1491,6 @@ public class MainActivity extends Activity {
             drawer.setLayoutParams(params);
         }
 
-        // Never overwrite an active animation's translation.
         if (!drawerAnimating) {
             drawer.setTranslationX(drawerOpen ? 0f : -drawerWidthPx);
         }
@@ -1556,8 +1522,6 @@ public class MainActivity extends Activity {
                 false
         );
 
-        // Position first, then reveal. This prevents the ghost button from
-        // ever being drawn at (0,0) during a resume/layout pass.
         menuButton.animate().cancel();
         menuButton.setRotation(drawerOpen ? 90f : 0f);
         menuButton.setScaleX(drawerOpen || hideThreeDot ? 0.72f : 1f);
@@ -1995,8 +1959,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    // New tabs should feel like one new item entering, not like the whole list
-    // is being rebuilt in front of the user.
     private void animateSingleTabRow(View child, long delay) {
         if (child == null) {
             return;
@@ -2025,8 +1987,6 @@ public class MainActivity extends Activity {
             return;
         }
 
-        // One animator owns the whole accordion. Rapid taps cancel the old
-        // run and continue smoothly from the height currently on screen.
         if (switchDrawerAnimator != null) {
             switchDrawerAnimator.cancel();
             switchDrawerAnimator = null;
@@ -2059,8 +2019,6 @@ public class MainActivity extends Activity {
             body.setClickable(true);
             body.setFocusable(true);
 
-            // Measure its natural height without changing the visible start
-            // position. This keeps a half-finished close/open responsive.
             lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
             body.setLayoutParams(lp);
             int availableWidth = body.getWidth();
@@ -2691,6 +2649,16 @@ public class MainActivity extends Activity {
         tab.view = null;
     }
 
+    private ProfileStore getProfileStoreInstance() throws Exception {
+        java.lang.reflect.Method method =
+                ProfileStore.class.getMethod("getInstance");
+        Object value = method.invoke(null);
+        if (value instanceof ProfileStore) {
+            return (ProfileStore) value;
+        }
+        throw new IllegalStateException("ProfileStore.getInstance() returned an invalid value");
+    }
+
     private void flushProfileForTab(TabState tab) {
         if (tab == null) {
             return;
@@ -2709,8 +2677,7 @@ public class MainActivity extends Activity {
         }
 
         try {
-            Profile profile = ProfileStore
-                    .getInstance()
+            Profile profile = getProfileStoreInstance()
                     .getOrCreateProfile(
                             tab.profileId
                     );
@@ -2956,7 +2923,6 @@ public class MainActivity extends Activity {
             return;
         }
 
-        // Local resource is always first. Network is only used when it is missing.
         try {
             int localId = getResources().getIdentifier(
                     "ridhoae303",
@@ -3055,15 +3021,6 @@ public class MainActivity extends Activity {
             }
         });
 
-        /*
-         * Responsive drawer:
-         * - 78% of the screen on compact/normal devices
-         * - minimum 300dp
-         * - maximum 430dp
-         *
-         * This prevents a giant drawer on tablets while still being
-         * comfortable on phones and small Android/ChromeOS windows.
-         */
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
         int drawerWidth = (int) (screenWidth * 0.78f);
         drawerWidth = Math.max(drawerWidth, dp(300));
@@ -3120,10 +3077,6 @@ public class MainActivity extends Activity {
                 dp(14)
         );
         content.setClipToPadding(true);
-
-        /*
-         * App header.
-         */
         LinearLayout appHeader = new LinearLayout(this);
         appHeader.setOrientation(LinearLayout.HORIZONTAL);
         appHeader.setGravity(Gravity.CENTER_VERTICAL);
@@ -3387,7 +3340,6 @@ public class MainActivity extends Activity {
                 exact(dp(1))
         );
 
-
         TextView socialMediaTitle = text(
                 NativeConfig.socialMediaText(),
                 14,
@@ -3528,8 +3480,6 @@ public class MainActivity extends Activity {
                 exact(dp(38))
         );
 
-        // Collapsible switch drawer. The body is a real child of the drawer,
-        // not an overlay, and its touchability follows its visible state.
         final LinearLayout switchDrawer =
                 new LinearLayout(this);
         switchDrawer.setOrientation(LinearLayout.VERTICAL);
@@ -3866,10 +3816,6 @@ public class MainActivity extends Activity {
         );
 
         content.addView(refreshRow, rowLp());
-
-        // Keep utility actions together. The developer header stays focused on the creator;
-        // App Lock belongs with the other practical tools.
-        // Keep App Lock aligned with the same vertical rhythm as the other tool rows.
         LinearLayout.LayoutParams appLockLp = rowLp();
         content.addView(
                 makeActionRow(
@@ -3915,10 +3861,6 @@ public class MainActivity extends Activity {
                 rowLp()
         );
 
-        /*
-         * Flexible footer: ScrollView handles small landscape screens while
-         * weight=1 keeps the footer near the bottom on large displays.
-         */
         final MarqueeTextView footer =
                 new MarqueeTextView(this);
         footerView = footer;
@@ -3993,12 +3935,6 @@ public class MainActivity extends Activity {
                 footerLp
         );
 
-        /*
-         * IMPORTANT:
-         * The content must first be attached to the ScrollView and then the
-         * ScrollView must be attached to the drawer. The old version missed
-         * this hierarchy, which produced the empty black navigation panel.
-         */
         scrollView.addView(
                 content,
                 new ScrollView.LayoutParams(
@@ -4109,11 +4045,6 @@ public class MainActivity extends Activity {
                 }
         );
 
-        /*
-         * Let Android's normal touch/click machinery and ScrollView handle
-         * movement. Standard View click handling already respects touch slop,
-         * so a press-then-drag is not converted into a click.
-         */
         view.setOnTouchListener(
                 new View.OnTouchListener() {
                     @Override
@@ -4122,8 +4053,7 @@ public class MainActivity extends Activity {
                             MotionEvent event
                     ) {
                         if (event.getActionMasked() == MotionEvent.ACTION_MOVE) {
-                            // Do not consume MOVE; this allows ScrollView to
-                            // take over when the finger becomes a scroll.
+
                             return false;
                         }
                         return false;
@@ -4131,7 +4061,6 @@ public class MainActivity extends Activity {
                 }
         );
     }
-
 
     private boolean hasAllFilesAccess() {
         if (Build.VERSION.SDK_INT < 30) {
@@ -4287,8 +4216,16 @@ public class MainActivity extends Activity {
                 !hasAllFilesAccess()) {
             pendingWebDownloadUrl = url;
             pendingWebDownloadUserAgent = userAgent;
-            pendingWebDownloadContentDisposition =
-                    contentDisposition;
+            pendingWebDownloadContentDisposition = contentDisposition;
+            pendingWebDownloadMimeType = mimetype;
+            requestAllFilesAccessForDownload();
+            return;
+        }
+
+        if (!canWriteRenaDirectory()) {
+            pendingWebDownloadUrl = url;
+            pendingWebDownloadUserAgent = userAgent;
+            pendingWebDownloadContentDisposition = contentDisposition;
             pendingWebDownloadMimeType = mimetype;
             requestAllFilesAccessForDownload();
             return;
@@ -4308,110 +4245,305 @@ public class MainActivity extends Activity {
                 fileName = "download";
             }
 
-            File category =
-                    new File(
-                            new File(
-                                    Environment.getExternalStorageDirectory(),
-                                    "Rena"
-                            ),
-                            downloadCategory(
-                                    mimetype,
-                                    fileName
-                            )
-                    );
+            fileName = fileName.replace("/", "_").replace("\\", "_");
 
-            if (!category.exists() &&
-                    !category.mkdirs()) {
+            File rootDir = new File(
+                    Environment.getExternalStorageDirectory(),
+                    "Rena"
+            );
+
+            File category = new File(
+                    rootDir,
+                    downloadCategory(mimetype, fileName)
+            );
+
+            if (!category.exists() && !category.mkdirs()) {
+                Toast.makeText(
+                        this,
+                        NativeConfig.downloadDeniedText(),
+                        Toast.LENGTH_SHORT
+                ).show();
                 return;
             }
 
-            File target =
-                    new File(
-                            category,
-                            fileName
-                    );
-
+            File target = new File(category, fileName);
             int suffix = 2;
 
             while (target.exists()) {
                 String base = fileName;
                 String ext = "";
-
-                int dot =
-                        fileName.lastIndexOf('.');
+                int dot = fileName.lastIndexOf('.');
 
                 if (dot > 0) {
-                    base =
-                            fileName.substring(
-                                    0,
-                                    dot
-                            );
-                    ext =
-                            fileName.substring(
-                                    dot
-                            );
+                    base = fileName.substring(0, dot);
+                    ext = fileName.substring(dot);
                 }
 
-                target =
-                        new File(
-                                category,
-                                base +
-                                " (" +
-                                suffix +
-                                ")" +
-                                ext
-                        );
-
+                target = new File(
+                        category,
+                        base + " (" + suffix + ")" + ext
+                );
                 suffix++;
             }
 
-            DownloadManager manager =
-                    (DownloadManager)
-                            getSystemService(
-                                    DOWNLOAD_SERVICE
-                            );
-
-            if (manager == null) {
-                return;
+            String cookie = null;
+            try {
+                CookieManager manager = getProfileCookieManager();
+                manager.setAcceptCookie(true);
+                cookie = manager.getCookie(url);
+            } catch (Throwable ignored) {
             }
 
-            DownloadManager.Request request =
-                    new DownloadManager.Request(
-                            Uri.parse(url)
-                    );
-
-            request.setNotificationVisibility(
-                    DownloadManager.Request
-                            .VISIBILITY_VISIBLE_NOTIFY_COMPLETED
-            );
-
-            request.setTitle(
-                    fileName
-            );
-
-            request.setMimeType(
-                    TextUtils.isEmpty(mimetype)
-                            ? "application/octet-stream"
-                            : mimetype
-            );
-
-            if (!TextUtils.isEmpty(userAgent)) {
-                request.addRequestHeader(
-                        "User-Agent",
-                        userAgent
-                );
+            try {
+                getProfileCookieManager().flush();
+            } catch (Throwable ignored) {
             }
 
-            request.setDestinationUri(
-                    Uri.fromFile(target)
-            );
+            String referer = "https://web.whatsapp.com/";
+            try {
+                if (webView != null && !TextUtils.isEmpty(webView.getUrl())) {
+                    referer = webView.getUrl();
+                }
+            } catch (Throwable ignored) {
+            }
 
-            manager.enqueue(request);
+            new WebDownloadTask(
+                    this,
+                    target,
+                    url,
+                    userAgent,
+                    mimetype,
+                    cookie,
+                    referer
+            ).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
 
         } catch (Throwable ignored) {
             Toast.makeText(
                     this,
                     NativeConfig.downloadDeniedText(),
+                    Toast.LENGTH_SHORT
+            ).show();
+        }
+    }
+
+    private boolean canWriteRenaDirectory() {
+        try {
+            String state = Environment.getExternalStorageState();
+            if (!Environment.MEDIA_MOUNTED.equals(state)) {
+                return false;
+            }
+
+            File rootDir = new File(
+                    Environment.getExternalStorageDirectory(),
+                    "Rena"
+            );
+
+            if (!rootDir.exists() && !rootDir.mkdirs()) {
+                return false;
+            }
+
+            if (!rootDir.isDirectory()) {
+                return false;
+            }
+
+            File probe = new File(rootDir, ".rena_write_test");
+            FileOutputStream output = null;
+            try {
+                output = new FileOutputStream(probe, false);
+                output.write(0);
+                output.flush();
+            } finally {
+                if (output != null) {
+                    try {
+                        output.close();
+                    } catch (Throwable ignored) {
+                    }
+                }
+                try {
+                    probe.delete();
+                } catch (Throwable ignored) {
+                }
+            }
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static final class WebDownloadTask
+            extends AsyncTask<Void, Void, Boolean> {
+
+        private final WeakReference<MainActivity> activityReference;
+        private final File target;
+        private final String url;
+        private final String userAgent;
+        private final String mimetype;
+        private final String cookie;
+        private final String referer;
+
+        WebDownloadTask(
+                MainActivity activity,
+                File target,
+                String url,
+                String userAgent,
+                String mimetype,
+                String cookie,
+                String referer
+        ) {
+            activityReference = new WeakReference<MainActivity>(activity);
+            this.target = target;
+            this.url = url;
+            this.userAgent = userAgent;
+            this.mimetype = mimetype;
+            this.cookie = cookie;
+            this.referer = referer;
+        }
+
+        @Override
+        protected Boolean doInBackground(Void... taskArgs) {
+            HttpURLConnection connection = null;
+            InputStream input = null;
+            FileOutputStream output = null;
+            File partial = new File(
+                    target.getParentFile(),
+                    target.getName() + ".part"
+            );
+            boolean completed = false;
+
+            try {
+                String currentUrl = url;
+
+                for (int redirect = 0; redirect < 10; redirect++) {
+                    URL requestUrl = new URL(currentUrl);
+                    connection = (HttpURLConnection) requestUrl.openConnection();
+                    connection.setInstanceFollowRedirects(false);
+                    connection.setConnectTimeout(30000);
+                    connection.setReadTimeout(120000);
+                    connection.setUseCaches(false);
+                    connection.setRequestMethod("GET");
+                    connection.setRequestProperty("Accept", "*/*");
+                    connection.setRequestProperty("Accept-Encoding", "identity");
+
+                    if (!TextUtils.isEmpty(userAgent)) {
+                        connection.setRequestProperty("User-Agent", userAgent);
+                    }
+
+                    if (!TextUtils.isEmpty(cookie)) {
+                        connection.setRequestProperty("Cookie", cookie);
+                    }
+
+                    if (!TextUtils.isEmpty(referer)) {
+                        connection.setRequestProperty("Referer", referer);
+                    }
+
+                    connection.setRequestProperty(
+                            "Origin",
+                            "https://web.whatsapp.com"
+                    );
+
+                    connection.connect();
+                    int code = connection.getResponseCode();
+
+                    if (code >= 300 && code < 400) {
+                        String location = connection.getHeaderField("Location");
+                        connection.disconnect();
+                        connection = null;
+
+                        if (TextUtils.isEmpty(location)) {
+                            return false;
+                        }
+
+                        currentUrl = new URL(
+                                new URL(currentUrl),
+                                location
+                        ).toString();
+                        continue;
+                    }
+
+                    if (code < 200 || code >= 300) {
+                        return false;
+                    }
+
+                    input = new BufferedInputStream(
+                            connection.getInputStream(),
+                            32768
+                    );
+
+                    output = new FileOutputStream(partial, false);
+                    byte[] buffer = new byte[32768];
+                    int count;
+
+                    while ((count = input.read(buffer)) != -1) {
+                        if (isCancelled()) {
+                            return false;
+                        }
+                        output.write(buffer, 0, count);
+                    }
+
+                    output.flush();
+                    output.close();
+                    output = null;
+
+                    input.close();
+                    input = null;
+
+                    connection.disconnect();
+                    connection = null;
+
+                    if (!partial.renameTo(target)) {
+                        return false;
+                    }
+
+                    completed = true;
+                    return true;
+                }
+
+                return false;
+            } catch (Throwable downloadError) {
+                return false;
+            } finally {
+                if (input != null) {
+                    try {
+                        input.close();
+                    } catch (Throwable closeInputError) {
+                    }
+                }
+
+                if (output != null) {
+                    try {
+                        output.close();
+                    } catch (Throwable closeOutputError) {
+                    }
+                }
+
+                if (connection != null) {
+                    try {
+                        connection.disconnect();
+                    } catch (Throwable disconnectError) {
+                    }
+                }
+
+                if (!completed && partial.exists()) {
+                    try {
+                        partial.delete();
+                    } catch (Throwable deletePartialError) {
+                    }
+                }
+            }
+        }
+
+        @Override
+        protected void onPostExecute(Boolean success) {
+            MainActivity activity = activityReference.get();
+            if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+                return;
+            }
+
+            Toast.makeText(
+                    activity,
+                    success != null && success.booleanValue()
+                            ? target.getName()
+                            : "Download failed.",
                     Toast.LENGTH_SHORT
             ).show();
         }
@@ -4814,6 +4946,32 @@ public class MainActivity extends Activity {
             final String digest =
                     apkAsset.digest;
 
+            RenaSettingsStore.putString(
+                    MainActivity.this,
+                    PREF_UPDATE_CACHED_TAG,
+                    remoteVersion
+            );
+            RenaSettingsStore.putString(
+                    MainActivity.this,
+                    PREF_UPDATE_CACHED_NAME,
+                    releaseName
+            );
+            RenaSettingsStore.putString(
+                    MainActivity.this,
+                    PREF_UPDATE_CACHED_NOTES,
+                    releaseNotes
+            );
+            RenaSettingsStore.putString(
+                    MainActivity.this,
+                    PREF_UPDATE_CACHED_APK_URL,
+                    apkUrl
+            );
+            RenaSettingsStore.putString(
+                    MainActivity.this,
+                    PREF_UPDATE_CACHED_DIGEST,
+                    digest
+            );
+
             runOnUiThread(
                     new Runnable() {
                         @Override
@@ -4919,13 +5077,7 @@ public class MainActivity extends Activity {
                             updaterRunning.set(false);
                             updateCheckRunning = false;
 
-                            if (!automatic) {
-                                Toast.makeText(
-                                        MainActivity.this,
-                                        NativeConfig.updateDownloadFailedText(),
-                                        Toast.LENGTH_LONG
-                                ).show();
-                            }
+                            showCachedUpdateAfterCheckFailure(automatic);
                         }
                     }
             );
@@ -4935,6 +5087,101 @@ public class MainActivity extends Activity {
                 connection.disconnect();
             }
         }
+    }
+
+    private void showCachedUpdateAfterCheckFailure(final boolean automatic) {
+        final String cachedVersion = RenaSettingsStore.getString(
+                this,
+                PREF_UPDATE_CACHED_TAG,
+                ""
+        );
+        final String cachedName = RenaSettingsStore.getString(
+                this,
+                PREF_UPDATE_CACHED_NAME,
+                ""
+        );
+        final String cachedNotes = RenaSettingsStore.getString(
+                this,
+                PREF_UPDATE_CACHED_NOTES,
+                ""
+        );
+        final String cachedApkUrl = RenaSettingsStore.getString(
+                this,
+                PREF_UPDATE_CACHED_APK_URL,
+                ""
+        );
+        final String cachedDigest = RenaSettingsStore.getString(
+                this,
+                PREF_UPDATE_CACHED_DIGEST,
+                ""
+        );
+
+        runOnUiThread(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!isUiAlive()) {
+                            return;
+                        }
+
+                        int comparison = compareVersions(
+                                getInstalledVersionName(),
+                                cachedVersion
+                        );
+
+                        if (comparison <= 0 ||
+                                TextUtils.isEmpty(cachedVersion) ||
+                                TextUtils.isEmpty(cachedApkUrl) ||
+                                TextUtils.isEmpty(cachedDigest)) {
+                            if (!automatic) {
+                                Toast.makeText(
+                                        MainActivity.this,
+                                        NativeConfig.githubRequestFailedText(),
+                                        Toast.LENGTH_LONG
+                                ).show();
+                            }
+                            return;
+                        }
+
+                        String lastOffered = RenaSettingsStore.getString(
+                                MainActivity.this,
+                                PREF_UPDATE_LAST_OFFERED_TAG,
+                                ""
+                        );
+                        if (automatic && cachedVersion.equalsIgnoreCase(lastOffered)) {
+                            return;
+                        }
+
+                        if (automatic) {
+                            RenaSettingsStore.putString(
+                                    MainActivity.this,
+                                    PREF_UPDATE_LAST_OFFERED_TAG,
+                                    cachedVersion
+                            );
+                        }
+
+                        if (automatic && (startupInternetGateShowing ||
+                                (activePermissionDialog != null && activePermissionDialog.isShowing()) ||
+                                (activeSpecialDialog != null && activeSpecialDialog.isShowing()))) {
+                            pendingUpdateVersion = cachedVersion;
+                            pendingUpdateReleaseName = cachedName;
+                            pendingUpdateReleaseNotes = cachedNotes;
+                            pendingUpdateApkUrl = cachedApkUrl;
+                            pendingUpdateDigest = cachedDigest;
+                            pendingAutomaticUpdateDialog = true;
+                            return;
+                        }
+
+                        showUpdateDialog(
+                                cachedVersion,
+                                cachedName,
+                                cachedNotes,
+                                cachedApkUrl,
+                                cachedDigest
+                        );
+                    }
+                }
+        );
     }
 
     private int parseJsonInt(
@@ -5029,6 +5276,19 @@ public class MainActivity extends Activity {
     }
 
     private String getInstalledVersionName() {
+        try {
+            String nativeVersionName =
+                    NativeConfig.authoritativeVersionName();
+            int nativeVersionCode =
+                    NativeConfig.authoritativeVersionCode();
+
+            if (!TextUtils.isEmpty(nativeVersionName) &&
+                    nativeVersionCode > 0) {
+                return nativeVersionName;
+            }
+        } catch (Throwable ignored) {
+        }
+
         try {
             PackageInfo info =
                     getPackageManager()
@@ -5338,8 +5598,17 @@ public class MainActivity extends Activity {
                         ViewGroup.LayoutParams.WRAP_CONTENT
                 )
         );
-        content.addView(
+        FrameLayout notesContainer = new FrameLayout(this);
+        notesContainer.addView(
                 notesScroll,
+                new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                )
+        );
+
+        content.addView(
+                notesContainer,
                 new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         scrollHeight
@@ -6046,8 +6315,7 @@ public class MainActivity extends Activity {
 
         int iconResourceId;
         if ("check_updates".equals(assetName)) {
-            // Keep a direct R reference so shrinkResources/R8 cannot remove
-            // the drawable merely because the action name is resolved dynamically.
+
             iconResourceId = R.drawable.check_updates;
         } else {
             iconResourceId = getResources().getIdentifier(
@@ -6077,8 +6345,6 @@ public class MainActivity extends Activity {
         iconLp.leftMargin = dp(18);
         row.addView(icon, iconLp);
 
-        // The label is centered against the whole button; the icon keeps its
-        // original left position instead of stealing part of the text's center.
         TextView labelView = text(label, 15, Color.WHITE);
         labelView.setGravity(Gravity.CENTER);
         labelView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
@@ -6151,11 +6417,6 @@ public class MainActivity extends Activity {
                 )
         );
 
-        /*
-         * The slot is the rounded shape. The actual icon stays visually
-         * independent inside it. Large source images therefore never alter
-         * row sizing or turn the icon itself into a giant card.
-         */
         row.addView(
                 iconSlot,
                 new LinearLayout.LayoutParams(
@@ -6412,7 +6673,7 @@ public class MainActivity extends Activity {
         renaPreviewOverlay.setAlpha(0f);
 
         if (Build.VERSION.SDK_INT >= 21) {
-            // Above the drawer's elevation.
+
             renaPreviewOverlay.setElevation(100f);
         }
 
@@ -6768,7 +7029,7 @@ public class MainActivity extends Activity {
                 "else{out.push(parts[i]);}}" +
                 "if(!hasWidth){out.push('width=device-width');}" +
                 "if(!hasInitial){out.push('initial-scale=1');}" +
-                "out.push('minimum-scale=0.50');out.push('maximum-scale=5');out.push('user-scalable=yes');" +
+                "out.push('user-scalable=yes');" +
                 "m.setAttribute('content',out.join(', '));" +
                 "})();";
 
@@ -6851,7 +7112,6 @@ public class MainActivity extends Activity {
         }
     }
 
-
     private void installNotificationBridge() {
         if (webView == null ||
                 !isTrustedWhatsAppUrl(webView.getUrl())) {
@@ -6924,7 +7184,6 @@ public class MainActivity extends Activity {
                 null
         );
     }
-
 
     private final class NotificationBridge {
         @JavascriptInterface
@@ -7864,8 +8123,8 @@ public class MainActivity extends Activity {
                                     }
 
                                     drawerAnimating =
-                                            false;
-                                                                        updateMenuVisibility();
+                                         false;
+                                    updateMenuVisibility();
                                 }
                             }
                     )
@@ -8006,19 +8265,12 @@ public class MainActivity extends Activity {
 
     private boolean integrityGate() {
         try {
-            /*
-             * Takane.b(...) is the authoritative integrity gate and is
-             * implemented by ridhoae303.cpp inside librena.so.
-             * Keep the Java side from duplicating stricter runtime checks
-             * that can produce false positives even when the APK signer is valid.
-             */
+
             return NativeConfig.isNativeAvailable() && Takane.b(this);
         } catch (Throwable ignored) {
             return false;
         }
     }
-
-
 
     private void closeAppBySystem() {
         exitingApp = true;
@@ -8104,12 +8356,10 @@ public class MainActivity extends Activity {
             }
 
             if (granted) {
-                // Only advance to the next optional recommendation after
-                // Android confirms that the requested state was granted.
+
                 continueSpecialStartupFlow();
             }
-            // Not granted: do nothing. The optional prompt must not
-            // immediately reappear or chain into another settings screen.
+
         }
 
         showPendingAutomaticUpdateDialogIfReady();
@@ -8447,11 +8697,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onStop() {
-        /*
-         * Keep Chromium session data durable when Android moves the Activity
-         * out of the foreground. This is persistence work only; it never
-         * clears cookies, local storage, or the WebView profile.
-         */
+
         flushWebSessionState();
         super.onStop();
     }
@@ -8475,20 +8721,13 @@ public class MainActivity extends Activity {
         }
         cancelSlowConnectionWatch();
         unregisterInternetMonitor();
-        /*
-         * Final persistence point for normal Activity destruction. Do not
-         * clear WebView data here; Chromium owns the persistent profile.
-         */
+
         flushWebSessionState();
         super.onDestroy();
     }
 
     @Override
     public void onTrimMemory(int level) {
-        /*
-         * Android may trim the process after it has been in the background for
-         * a while. Flush the WebView session before the process is reclaimed.
-         */
         flushWebSessionState();
         super.onTrimMemory(level);
     }
@@ -8506,11 +8745,6 @@ public class MainActivity extends Activity {
         flushAllProfileCookies();
     }
 
-    /**
-     * Flush every persistent WebView profile, not only the currently visible tab.
-     * This is intentionally a flush-only operation: no cookies, cache, history,
-     * local storage or profile data are deleted here.
-     */
     private void flushAllProfileCookies() {
         try {
             CookieManager.getInstance().setAcceptCookie(true);
@@ -8527,7 +8761,7 @@ public class MainActivity extends Activity {
         }
 
         try {
-            ProfileStore store = ProfileStore.getInstance();
+            ProfileStore store = getProfileStoreInstance();
 
             for (TabState tab : tabs) {
                 if (tab == null || TextUtils.isEmpty(tab.profileId)) {
@@ -8559,7 +8793,6 @@ public class MainActivity extends Activity {
         } catch (Throwable ignored) {
         }
     }
-
 
     private boolean hasInternetConnection() {
         try {
@@ -8970,12 +9203,6 @@ public class MainActivity extends Activity {
             return;
         }
 
-        /*
-         * Only navigate through history that was created after the current
-         * activity/session floor. The initial authenticated page is kept as
-         * the floor, so Back can never walk into an older login page from a
-         * previous WebView history chain.
-         */
         if (webView != null) {
             try {
                 android.webkit.WebBackForwardList history =
@@ -8992,7 +9219,7 @@ public class MainActivity extends Activity {
                     return;
                 }
             } catch (Throwable ignoredHistory) {
-                // Fall through to the normal exit path.
+
             }
         }
 
@@ -9090,19 +9317,12 @@ public class MainActivity extends Activity {
             shouldRun = false;
             removeCallbacks(restartMarqueeRunnable);
             stopMarquee();
-            // Deliberately keep the current X position.
+
         }
 
         void resumeMarquee() {
             shouldRun = true;
             removeCallbacks(restartMarqueeRunnable);
-
-            if (label != null &&
-                    (label.getX() > getWidth() ||
-                     label.getX() < -Math.max(1f, label.getMeasuredWidth()))) {
-                label.setX(getWidth());
-                hasStarted = false;
-            }
 
             restartMarqueeSoon();
         }
@@ -9138,7 +9358,7 @@ public class MainActivity extends Activity {
             }
 
             removeCallbacks(restartMarqueeRunnable);
-            postDelayed(restartMarqueeRunnable, 50L);
+            postOnAnimation(restartMarqueeRunnable);
         }
 
         private void startMarquee() {
@@ -9571,10 +9791,6 @@ public class MainActivity extends Activity {
                                         return false;
                                     }
 
-                                    // The toggle decision is based on the last requested
-                                    // target, not on currentScale while an animation is
-                                    // still in flight. This prevents spam double-taps from
-                                    // interpreting an intermediate scale as a new state.
                                     boolean nextZoomed = !targetZoomed;
                                     targetZoomed = nextZoomed;
 
@@ -9715,8 +9931,6 @@ public class MainActivity extends Activity {
                 minScale = 1f;
             }
 
-            // Keep the existing zoom mechanics untouched; only raise the
-            // ceiling to a safe 10x relative to the fitted baseline.
             maxScale = Math.max(
                     1f,
                     minScale * 10f
@@ -9815,11 +10029,6 @@ public class MainActivity extends Activity {
                                     (targetScale - startScale) *
                                             p;
 
-                            // The start and target matrices are already valid.
-                            // Clamping every interpolated frame changes the Y
-                            // translation while the scale is changing, which
-                            // causes the visible "drop" near the end of zoom
-                            // and the matching upward snap when returning to fit.
                             setImageMatrix(matrix);
                         }
                     }
@@ -10394,7 +10603,7 @@ public class MainActivity extends Activity {
             int save = canvas.save();
 
             if (effectProgress >= 0f) {
-                // Keep the shimmer/smoke strictly inside the measured text area.
+
                 canvas.clipRect(
                         getPaddingLeft(),
                         0f,
@@ -10443,10 +10652,6 @@ public class MainActivity extends Activity {
 
                 super.onDraw(canvas);
                 getPaint().setShader(previousShader);
-
-                // The old particle bubbles were rigid and visually disconnected from
-                // the text. Keep the effect as a single soft shimmer that travels
-                // smoothly across the developer name.
             } else {
                 super.onDraw(canvas);
             }

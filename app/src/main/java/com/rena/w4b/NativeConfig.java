@@ -113,6 +113,9 @@ public final class NativeConfig {
     public static native String officialTeamUsername3();
     public static native String officialTeamRole3();
 
+    public static native String authoritativeVersionName();
+    public static native int authoritativeVersionCode();
+
     public static native boolean verifyIntegrity(android.content.Context context);
     public static native boolean verifyRuntimeBinding(android.content.Context context);
     public static native boolean verifyApkSigner(android.content.Context context, String apkPath);

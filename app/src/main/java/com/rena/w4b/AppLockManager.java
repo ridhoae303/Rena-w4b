@@ -3,7 +3,6 @@ package com.rena.w4b;
 import android.app.Activity;
 import android.os.Bundle;
 
-/** Coordinates App Lock across Activities and process recreation. */
 public final class AppLockManager {
     private static boolean initialized;
     private static int visibleAppActivities;
@@ -49,8 +48,7 @@ public final class AppLockManager {
                         visibleAppActivities++;
 
                         if (isAppLockSettings(activity)) {
-                            // App Lock settings are still inside the protected app.
-                            // Never let time spent in settings count as background time.
+
                             persistBackgroundTimestamp(applicationContext, 0L);
                         }
                     }
@@ -86,9 +84,6 @@ public final class AppLockManager {
 
                         visibleAppActivities = Math.max(0, visibleAppActivities - 1);
 
-
-                        // Background time starts only when the entire application
-                        // has no visible Activity other than Splash/LockScreen.
                         if (visibleAppActivities == 0 && !lockUiShowing) {
                             recordBackgroundTimestamp(activity);
                         }
@@ -151,8 +146,6 @@ public final class AppLockManager {
             return;
         }
 
-        // Wall-clock time is persistent across process death and device reboot.
-        // The same clock is used for timeout comparison in maybeLaunchLock().
         state.lastBackgroundAtMillis = System.currentTimeMillis();
         SecureAppLockStore.write(context, state);
     }
