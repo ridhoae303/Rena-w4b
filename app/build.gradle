@@ -7,8 +7,8 @@ android {
         applicationId "com.rena.w4b"
         minSdkVersion 26
         targetSdkVersion 37
-        versionCode 16
-        versionName "1.0.6"
+        versionCode 17
+        versionName "1.0.7"
 
         ndk {
             abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
@@ -22,7 +22,7 @@ android {
             shrinkResources true
             minifyEnabled true
 
-            proguardFiles getDefaultProguardFile('proguard-android.txt'),
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
                     'proguard-rules.pro'
         }
 
@@ -49,11 +49,9 @@ android {
     namespace 'com.rena.w4b'
 }
 
-
 configurations.all {
     resolutionStrategy.force 'androidx.annotation:annotation:1.2.0'
 }
-
 
 dependencies {
     implementation 'androidx.annotation:annotation:1.2.0'
