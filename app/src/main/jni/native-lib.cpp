@@ -3,6 +3,7 @@
 #include <fstream>
 #include <cstring>
 #include <cstdint>
+#include <cstdlib>
 #include <dlfcn.h>
 #include <sys/stat.h>
 #include <EasyObfuse.h>
@@ -26,7 +27,6 @@ static jstring js(JNIEnv* env, const char* value) {
     }
     return out;
 }
-
 
 extern "C" JNIEXPORT jstring JNICALL
 JNI_METHOD(unsupportedAndroidTitle)(JNIEnv* env, jclass) {
@@ -119,7 +119,6 @@ static bool is_traced() {
 
     return false;
 }
-
 
 static bool nativeCheckString(JNIEnv* env, jobject value, const char* expected) {
     if (!env || !value || !expected) return false;
@@ -536,7 +535,6 @@ extern "C" JNIEXPORT jstring JNICALL
 JNI_METHOD(githubRequestFailedText)(JNIEnv* env, jclass) {
     return js(env, OBFUSCATE("GitHub request failed."));
 }
-
 
 extern "C" JNIEXPORT jstring JNICALL
 JNI_METHOD(easterEggFoundText)(JNIEnv* env, jclass) {
@@ -962,7 +960,6 @@ JNI_METHOD(officialTeamRole3)(JNIEnv* env, jclass) {
     return js(env, OBFUSCATE("Official Team"));
 }
 
-
 static std::string signingSha256FromPackageInfo(JNIEnv* env, jobject packageInfo, jint sdk) {
     if (!env || !packageInfo) return std::string();
 
@@ -1150,9 +1147,6 @@ extern "C" jint JNI_OnLoad(JavaVM* vm, void*) {
         return JNI_ERR;
     }
 
-    // Do not execute integrity verification while the native library is loading.
-    // Startup verification is explicitly initiated from SplashActivity after the
-    // Application and Java runtime are fully initialized.
     return JNI_VERSION_1_6;
 }
 
@@ -1357,7 +1351,6 @@ extern "C" JNIEXPORT jstring JNICALL
 JNI_METHOD(refreshText)(JNIEnv* env, jclass) {
     return js(env, OBFUSCATE("Refresh Page"));
 }
-
 
 extern "C" JNIEXPORT jstring JNICALL
 JNI_METHOD(socialMediaText)(JNIEnv* env, jclass) {
@@ -1658,6 +1651,17 @@ JNI_METHOD(githubRepositoryUrl)(JNIEnv* env, jclass) {
 }
 
 extern "C" JNIEXPORT jstring JNICALL
+JNI_METHOD(authoritativeVersionName)(JNIEnv* env, jclass) {
+    return js(env, OBFUSCATE("1.0.7"));
+}
+
+extern "C" JNIEXPORT jint JNICALL
+JNI_METHOD(authoritativeVersionCode)(JNIEnv* env, jclass) {
+    (void)env;
+    return static_cast<jint>(std::atoi(OBFUSCATE("17")));
+}
+
+extern "C" JNIEXPORT jstring JNICALL
 JNI_METHOD(updaterApiUrl)(JNIEnv* env, jclass) {
     return js(env, OBFUSCATE("https://api.github.com/repos/ridhoae303/Rena-w4b/releases/latest"));
 }
@@ -1801,7 +1805,6 @@ extern "C" JNIEXPORT jstring JNICALL
 JNI_METHOD(exitText)(JNIEnv* env, jclass) {
     return js(env, OBFUSCATE("Exit"));
 }
-
 
 extern "C" JNIEXPORT jstring JNICALL
 JNI_METHOD(notificationOpenText)(JNIEnv* env, jclass) {

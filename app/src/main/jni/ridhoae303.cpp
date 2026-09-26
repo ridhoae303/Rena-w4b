@@ -1,5 +1,3 @@
-// Created by ridhoae303
-
 #include <jni.h>
 #include <string>
 #include <cstdlib>
@@ -137,7 +135,6 @@ static jobject g(JNIEnv* env, jstring pkgName, jint userId) {
     (void) userId;
     return nullptr;
 }
-
 
 static jint getSdkInt(JNIEnv* env) {
     if (env == nullptr) return 0;
@@ -384,7 +381,6 @@ static void crashForIntegrityFailure(JNIEnv* env) {
         return;
     }
 
-    // Give the system Toast service enough time to display the queued message.
     usleep(1400000);
 
     jclass exceptionClass = env->FindClass(OBFUSCATE("java/lang/SecurityException"));
@@ -401,7 +397,6 @@ static void crashForIntegrityFailure(JNIEnv* env) {
         j();
     }
 }
-
 
 static std::string jstringToStdString(JNIEnv* env, jstring value) {
     if (env == nullptr || value == nullptr) return {};
@@ -442,7 +437,6 @@ static std::string jsonEscape(const std::string& input) {
 
     return out;
 }
-
 
 static void postLeechReport(JNIEnv* env, jobject context, const char* reason) {
     if (env == nullptr || context == nullptr || reason == nullptr) return;
@@ -689,12 +683,6 @@ static int m(JNIEnv* env, jobject context) {
         return kSignatureStateUnreadable;
     }
 
-    /*
-     * "ld" is a historical marker from an earlier failed check. It must
-     * never be trusted as the current integrity result: an old false
-     * positive would otherwise permanently kill a corrected installation.
-     * The current package signature is always authoritative below.
-     */
     (void) env->CallBooleanMethod(prefs, getBool, keyLeech, JNI_FALSE);
     env->DeleteLocalRef(keyLeech);
     if (clearJniException(env)) {
@@ -717,7 +705,7 @@ static int m(JNIEnv* env, jobject context) {
     if (clearJniException(env)) return kSignatureStateUnreadable;
 
     if (sigState == kSignatureStateMatch) {
-        // A previously stored failure marker must not survive a valid match.
+
         jclass spEditorClass = env->FindClass(OBFUSCATE("android/content/SharedPreferences$Editor"));
         if (!isJniBad(env, spEditorClass)) {
             jmethodID edit = env->GetMethodID(spClass, OBFUSCATE("edit"), OBFUSCATE("()Landroid/content/SharedPreferences$Editor;"));
@@ -789,10 +777,6 @@ extern "C" JNIEXPORT jboolean JNICALL
 Java_com_ridhoae303_expert_Takane_b(JNIEnv* env, jclass, jobject context) {
     if (env == nullptr || context == nullptr) return JNI_FALSE;
 
-    // The Context is already supplied directly to the native verifier.
-    // Do not depend on an additional Java helper method here: requiring a
-    // removable/rename-sensitive helper can turn a valid build into a false
-    // integrity failure after ProGuard or source cleanup.
     if (gVerified) return JNI_TRUE;
 
     const int sigState = m(env, context);
@@ -806,4 +790,3 @@ Java_com_ridhoae303_expert_Takane_b(JNIEnv* env, jclass, jobject context) {
 
     return JNI_FALSE;
 }
-
