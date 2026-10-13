@@ -16,6 +16,7 @@ import android.view.WindowManager;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import com.ridhoae303.expert.Miyako;
 
 public class SplashActivity extends Activity {
     private static final long SPLASH_DELAY_MS = 350L;
@@ -23,7 +24,9 @@ public class SplashActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-
+        
+        Miyako.Rena(this);
+        
         if (android.os.Build.VERSION.SDK_INT < 26) {
             new AlertDialog.Builder(this)
                     .setTitle(NativeConfig.unsupportedAndroidTitle())

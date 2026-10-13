@@ -107,6 +107,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Locale;
+import com.ridhoae303.expert.Miyako;
 
 public class MainActivity extends Activity {
 
@@ -346,7 +347,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-
+        
+        Miyako.Rena(this);
         applyImmersiveFullscreen();
 
         try {
