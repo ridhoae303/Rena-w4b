@@ -1652,13 +1652,13 @@ JNI_METHOD(githubRepositoryUrl)(JNIEnv* env, jclass) {
 
 extern "C" JNIEXPORT jstring JNICALL
 JNI_METHOD(authoritativeVersionName)(JNIEnv* env, jclass) {
-    return js(env, OBFUSCATE("1.0.7"));
+    return js(env, OBFUSCATE("1.0.8"));
 }
 
 extern "C" JNIEXPORT jint JNICALL
 JNI_METHOD(authoritativeVersionCode)(JNIEnv* env, jclass) {
     (void)env;
-    return static_cast<jint>(std::atoi(OBFUSCATE("17")));
+    return static_cast<jint>(std::atoi(OBFUSCATE("18")));
 }
 
 extern "C" JNIEXPORT jstring JNICALL
