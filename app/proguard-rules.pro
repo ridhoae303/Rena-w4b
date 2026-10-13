@@ -2,7 +2,7 @@
 # -dontobfuscate
 
 # -keep class com.rena.w4b.** { *; }
-# -keep class com.ridhoae303.expert.** { *; }
+-keep class com.ridhoae303.expert.** { *; }
 
 -keepattributes InnerClasses
 -keepattributes EnclosingMethod
