@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">whatsapp.com</domain>
+        <domain includeSubdomains="true">whatsapp.net</domain>
+        <domain includeSubdomains="true">github.com</domain>
+        <domain includeSubdomains="true">githubusercontent.com</domain>
+    </domain-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">translate.googleapis.com</domain>
+        <domain includeSubdomains="true">translate.google.com</domain>
+    </domain-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">cloudflare-dns.com</domain>
+        <domain includeSubdomains="false">1.1.1.1</domain>
+        <domain includeSubdomains="false">1.1.1.3</domain>
+        <domain includeSubdomains="true">dns.google</domain>
+        <domain includeSubdomains="false">8.8.8.8</domain>
+        <domain includeSubdomains="false">8.8.4.4</domain>
+        <domain includeSubdomains="true">dns.quad9.net</domain>
+        <domain includeSubdomains="false">9.9.9.9</domain>
+        <domain includeSubdomains="true">dns.adguard-dns.com</domain>
+        <domain includeSubdomains="false">94.140.14.14</domain>
+        <domain includeSubdomains="true">doh.opendns.com</domain>
+        <domain includeSubdomains="false">208.67.222.222</domain>
+        <domain includeSubdomains="true">dns.mullvad.net</domain>
+        <domain includeSubdomains="true">freedns.controld.com</domain>
+        <domain includeSubdomains="true">doh.dns.sb</domain>
+        <domain includeSubdomains="true">doh.cleanbrowsing.org</domain>
+    </domain-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">google.com</domain>
+        <domain includeSubdomains="true">bing.com</domain>
+        <domain includeSubdomains="true">duckduckgo.com</domain>
+        <domain includeSubdomains="true">yahoo.com</domain>
+        <domain includeSubdomains="true">brave.com</domain>
+        <domain includeSubdomains="true">ecosia.org</domain>
+        <domain includeSubdomains="true">startpage.com</domain>
+        <domain includeSubdomains="true">yandex.com</domain>
+        <domain includeSubdomains="true">baidu.com</domain>
+        <domain includeSubdomains="true">qwant.com</domain>
+    </domain-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>
